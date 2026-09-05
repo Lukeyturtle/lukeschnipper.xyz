@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio | Luke Schnipper</title>
+<meta name="description" content="Photography and music by Luke Schnipper.">
+<link rel="canonical" href="https://lukeschnipper.xyz/portfolio.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Luke Schnipper">
+<meta property="og:title" content="Portfolio | Luke Schnipper">
+<meta property="og:description" content="Photography and music by Luke Schnipper.">
+<meta property="og:url" content="https://lukeschnipper.xyz/portfolio.html">
+<meta property="og:image" content="https://lukeschnipper.xyz/img/avatar.jpg">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="img/avatar.jpg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="img/avatar.jpg" alt="">Luke Schnipper</a>
+    <nav>
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="youtube.html">YouTube</a></li>
+        <li><a href="portfolio.html" class="active">Portfolio</a></li>
+        <li><a href="store.html">Store</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+<main>
+<section class="page-head">
+  <div class="wrap">
+    <h1>Portfolio</h1>
+    <p>Photography and music. Newest first.</p>
+  </div>
+</section>
+
+<section style="padding-top:0" id="photography">
+  <div class="wrap">
+    <span class="tag">Photography</span>
+    <h2>Photos</h2>
+    <p class="sub">Mountains, trains, and whatever else ends up in front of the camera.</p>
+    <div class="gallery" id="gallery"></div>
+    <div class="soon" id="photos-empty" hidden>
+      <strong>No photos yet</strong>
+      They're coming.
+    </div>
+  </div>
+</section>
+
+<section id="music">
+  <div class="wrap">
+    <span class="tag">Music</span>
+    <h2>Music</h2>
+    <p class="sub">Tracks and projects I've worked on.</p>
+    <div class="tracks" id="tracks"></div>
+    <div class="soon" id="music-empty" hidden>
+      <strong>Nothing here yet</strong>
+      Music is coming. In the meantime, the channel has a few music videos.
+    </div>
+  </div>
+</section>
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <span>&copy; <span id="year"></span> Luke Schnipper</span>
+    <span>
+      <a href="https://www.youtube.com/channel/UCCg-XvMplxod1Fl-xb_kfGQ" target="_blank" rel="noopener">YouTube</a>
+      &nbsp;&middot;&nbsp;
+      <a href="mailto:general@lukaschnitzel.xyz">general@lukaschnitzel.xyz</a>
+    </span>
+  </div>
+</footer>
+<script>document.getElementById("year").textContent = new Date().getFullYear();</script>
+<div class="lightbox" id="lightbox" hidden>
+  <button class="lb-close" aria-label="Close">&times;</button>
+  <img id="lb-img" alt="">
+  <div class="lb-cap" id="lb-cap"></div>
+</div>
+<script>
+(async () => {
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const load = async u => { try { const r = await fetch(u, {cache: 'no-cache'}); return r.ok ? r.json() : []; } catch { return []; } };
+
+  const photos = await load('data/photos.json');
+  const gal = document.getElementById('gallery');
+  if (!photos.length) { document.getElementById('photos-empty').hidden = false; }
+  gal.innerHTML = photos.map((p, i) => `
+    <a href="${esc(p.full)}" class="shot" data-i="${i}" title="${esc(p.title)}">
+      <img src="${esc(p.thumb)}" alt="${esc(p.title)}" loading="lazy" width="${p.w}" height="${p.h}">
+    </a>`).join('');
+
+  const lb = document.getElementById('lightbox'), lbImg = document.getElementById('lb-img'), lbCap = document.getElementById('lb-cap');
+  let cur = 0;
+  const show = i => { cur = (i + photos.length) % photos.length; const p = photos[cur];
+    lbImg.src = p.full; lbImg.alt = p.title; lbCap.textContent = `${p.title} · ${p.date}`; lb.hidden = false; document.body.style.overflow = 'hidden'; };
+  const hide = () => { lb.hidden = true; document.body.style.overflow = ''; };
+  gal.addEventListener('click', e => { const a = e.target.closest('a.shot'); if (!a) return; e.preventDefault(); show(+a.dataset.i); });
+  lb.addEventListener('click', e => { if (e.target === lb || e.target.classList.contains('lb-close')) hide(); });
+  document.addEventListener('keydown', e => { if (lb.hidden) return;
+    if (e.key === 'Escape') hide(); if (e.key === 'ArrowRight') show(cur + 1); if (e.key === 'ArrowLeft') show(cur - 1); });
+
+  const tracks = await load('data/music.json');
+  if (!tracks.length) { document.getElementById('music-empty').hidden = false; }
+  document.getElementById('tracks').innerHTML = tracks.map(t => `
+    <div class="track">
+      <div class="track-head"><h4>${esc(t.title)}</h4><span class="track-meta">${esc(t.date)} · ${esc(t.ext.toUpperCase())} · ${t.size_mb} MB</span></div>
+      <audio controls preload="none" src="${esc(t.src)}"></audio>
+    </div>`).join('');
+})();
+</script>
+</body>
+</html>
