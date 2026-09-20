@@ -24,7 +24,9 @@ def slug(path: Path) -> str:
 
 def title_from(path: Path) -> str:
     name = re.sub(r"^\d+[\s._-]+", "", path.stem)  # drop a leading "01 - " style prefix
-    name = re.sub(r"[-_]+", " ", name).strip()
+    name = name.replace("_", " ")
+    name = re.sub(r"(?<! )-(?! )", " ", name)      # word-joining hyphen -> space, keep a spaced " - "
+    name = re.sub(r"\s+", " ", name).strip()
     return name[:1].upper() + name[1:] if name else path.stem
 
 
