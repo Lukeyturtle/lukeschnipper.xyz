@@ -85,7 +85,7 @@
     <article class="product" id="t-${esc(t.id)}">
       <div class="cover">${t.cover ? `<img src="${esc(t.cover)}" alt="${esc(t.title)} cover" loading="lazy">` : `<span aria-hidden="true">♪</span>`}</div>
       <div class="product-body">
-        <h3>${esc(t.title)}</h3>
+        <h3>${t.page ? `<a href="${esc(t.page)}">${esc(t.title)}</a>` : esc(t.title)}</h3>
         <p class="product-meta">${[mmss(t.duration), (t.formats || []).map(f => f.toUpperCase()).join(" · ")].filter(Boolean).join("  ·  ")}</p>
         ${t.description ? `<p class="product-desc">${esc(t.description)}</p>` : ""}
         ${t.preview ? `<audio controls preload="none" src="${esc(t.preview)}"></audio><span class="preview-note">30-second preview</span>` : ""}

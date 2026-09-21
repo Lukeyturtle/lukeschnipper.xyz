@@ -103,7 +103,7 @@ def make_cover(src, dest_public, dest_embed):
         im.resize((min(side, 600),) * 2, Image.LANCZOS).save(dest_embed, "JPEG", quality=88)
 
 
-def encode(master, info, work, tid, title, embed_cover):
+def encode(master, info, work, tid, title, embed_cover, formats):
     year = str(datetime.date.today().year)
     tags = ["-metadata", f"title={title}", "-metadata", f"artist={ARTIST}", "-metadata", f"album_artist={ARTIST}",
             "-metadata", f"date={year}", "-metadata", f"copyright=© {year} {ARTIST}. All rights reserved.",
@@ -118,11 +118,15 @@ def encode(master, info, work, tid, title, embed_cover):
     jobs = {
         "mp3": base + cover_in + ["-map", "0:a:0"] + cover_map + lossy_rate +
                ["-c:a", "libmp3lame", "-b:a", "320k", "-id3v2_version", "3", "-map_metadata", "-1"] + tags,
-        "m4a": base + cover_in + ["-map", "0:a:0"] + cover_map + lossy_rate +
-               ["-c:a", aac_codec, "-b:a", "256k", "-movflags", "+faststart", "-map_metadata", "-1"] + tags,
+        # An AAC master is copied as-is: re-encoding AAC to AAC only loses quality.
+        "m4a": base + cover_in + ["-map", "0:a:0"] + cover_map +
+               (["-c:a", "copy"] if info["codec"] == "aac" else lossy_rate + ["-c:a", aac_codec, "-b:a", "256k"]) +
+               ["-movflags", "+faststart", "-map_metadata", "-1"] + tags,
         "wav": base + ["-map", "0:a:0", "-c:a", f"pcm_s{pcm}le", "-map_metadata", "-1"] + tags,
         "aiff": base + ["-map", "0:a:0", "-c:a", f"pcm_s{pcm}be", "-write_id3v2", "1", "-map_metadata", "-1"] + tags,
     }
+    wanted = {"mp3": "mp3", "aac": "m4a", "wav": "wav", "aiff": "aiff"}
+    jobs = {wanted[f]: jobs[wanted[f]] for f in formats}
     for ext, cmd in jobs.items():
         dest = work / f"{tid}.{ext}"
         print(f"    encoding {ext.upper():4} ...", end="", flush=True)
@@ -177,8 +181,10 @@ def main():
     ap.add_argument("--preview-start", help="where the 30s preview starts, e.g. 45 or 1:05")
     ap.add_argument("--preview-length", type=float, default=30)
     ap.add_argument("--id", help="URL id (defaults to the title, e.g. 'late-night-drive')")
-    ap.add_argument("--payment-link", help="sell with this Stripe Payment Link (https://buy.stripe.com/...) instead of the store API")
-    ap.add_argument("--export", help="also save the four buyer files to this folder (default with --payment-link: your Desktop)")
+    ap.add_argument("--payment-link", help="Stripe Payment Link (https://buy.stripe.com/...) for the Buy button")
+    ap.add_argument("--page", help="web address for the song's page, e.g. 'wunderinwun' -> lukeschnipper.xyz/wunderinwun")
+    ap.add_argument("--formats", help="comma list from mp3,aac,wav,aiff (default: all four, or mp3,aac for a lossy master)")
+    ap.add_argument("--export", help="also save the buyer files to this folder")
     ap.add_argument("--local", action="store_true", help="upload to the local dev bucket instead of R2")
     ap.add_argument("--no-upload", action="store_true"); ap.add_argument("--no-publish", action="store_true")
     ap.add_argument("-y", "--yes", action="store_true", help="don't ask for confirmation")
@@ -190,7 +196,6 @@ def main():
             die("A Payment Link should start with https:// (usually https://buy.stripe.com/...).")
         if not link.startswith("https://buy.stripe.com/"):
             print(f"  ! {link} isn't a buy.stripe.com address. Using it anyway.")
-        a.no_upload = True  # Payment Link tracks are delivered by the link's after-payment redirect, not R2
     for tool in ("ffmpeg", "ffprobe"):
         if not shutil.which(tool):
             die(f"{tool} isn't installed. Run: brew install ffmpeg")
@@ -200,14 +205,28 @@ def main():
     if not master.is_file():
         die(f"Can't find {master}")
     info = probe(master)
-    if not info["lossless"]:
-        print(f"  ! {master.name} is {info['codec']} (lossy). WAV/AIFF buyers won't get true lossless quality.")
-        print("    Export a WAV or AIFF from your DAW if you can.")
+    if a.formats:
+        formats = [f.strip().lower() for f in a.formats.split(",") if f.strip()]
+        bad = [f for f in formats if f not in ("mp3", "aac", "wav", "aiff")]
+        if bad or not formats:
+            die(f"Unknown format(s): {', '.join(bad) or '(none)'}. Pick from mp3, aac, wav, aiff.")
+    elif info["lossless"]:
+        formats = ["mp3", "aac", "wav", "aiff"]
+    else:
+        print(f"  ! {master.name} is {info['codec']}, a compressed (lossy) file. Converting it to WAV/AIFF")
+        print("    gives huge files that sound no better, so they shouldn't be sold as lossless.")
+        print("    For all four formats, export WAV or AIFF from your DAW (GarageBand: Share > Export Song to Disk).")
+        answer = ask("Sell this one as MP3 + AAC only? (y/n)", "y")
+        formats = ["mp3", "aac"] if answer.lower() in ("y", "yes") else ["mp3", "aac", "wav", "aiff"]
 
     title = a.title or ask("Title", title_from(master))
     catalog = load_catalog()
     tid = slug(a.id or title)
     existing = next((t for t in catalog["tracks"] if t["id"] == tid), None)
+    page = slug(a.page or (existing or {}).get("page") or tid.replace("-", ""))
+    taken = {p.stem for p in ROOT.glob("*.html")} | {t.get("page") for t in catalog["tracks"] if t["id"] != tid}
+    if page in taken:
+        die(f"The page name '{page}' is already used. Pick another with --page.")
     price_default = str(existing["price"]) if existing else "1.99"
     price_raw = a.price or ask(f"Price ({catalog.get('currency', 'gbp').upper()})", price_default)
     try:
@@ -225,7 +244,8 @@ def main():
 
     mins, secs = divmod(int(info["duration"]), 60)
     print(f"\n  {title}  ·  {price:.2f} {catalog.get('currency', 'gbp').upper()}  ·  {mins}:{secs:02d}"
-          f"  ·  {info['rate'] // 1000} kHz / {info['bits']}-bit  ·  id: {tid}")
+          f"  ·  {info['rate'] // 1000} kHz / {info['bits']}-bit  ·  {'/'.join(f.upper() for f in formats)}"
+          f"\n  page: lukeschnipper.xyz/{page}")
     if existing:
         print("  ! A track with this id already exists. Its files and listing will be replaced.")
     if not a.yes and sys.stdin.isatty() and ask("Go ahead? (y/n)", "y").lower() not in ("y", "yes"):
@@ -241,11 +261,11 @@ def main():
             embed = work / "cover.jpg"
             make_cover(cover_src, public_cover, embed)
         print("\n  Making formats")
-        files = encode(master, info, work, tid, title, embed)
+        files = encode(master, info, work, tid, title, embed, formats)
         preview = STORE / "previews" / f"{tid}.mp3"
         make_preview(master, info, preview, pstart, a.preview_length)
         print(f"    preview   ... {preview.stat().st_size / 1024:.0f} KB (public)")
-        export_dir = Path(a.export).expanduser() if a.export else (Path.home() / "Desktop" / f"{title} - buyer files" if link else None)
+        export_dir = Path(a.export).expanduser() if a.export else None
         if export_dir:
             export_dir.mkdir(parents=True, exist_ok=True)
             for ext, path in files.items():
@@ -259,7 +279,8 @@ def main():
         "id": tid, "title": title, "price": price, "description": description or "",
         "cover": f"store/covers/{tid}.jpg" if (cover_src or (existing and existing.get("cover"))) else "",
         "preview": f"store/previews/{tid}.mp3",
-        "formats": ["mp3", "aac", "wav", "aiff"],
+        "formats": formats,
+        "page": page,
         "duration": round(info["duration"]),
         "released": existing["released"] if existing else datetime.date.today().isoformat(),
         "available": True,
@@ -269,6 +290,9 @@ def main():
     catalog["tracks"] = [entry] + [t for t in catalog["tracks"] if t["id"] != tid]
     CATALOG.write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + "\n")
     print(f"\n  Added to {CATALOG.relative_to(ROOT)}")
+    if link:
+        print("\n  In Stripe, set this Payment Link's After payment redirect to:")
+        print(f"    https://lukeschnipper.xyz/{page}?session_id={{CHECKOUT_SESSION_ID}}")
 
     changed = [CATALOG, STORE / "previews" / f"{tid}.mp3"] + ([STORE / "covers" / f"{tid}.jpg"] if entry["cover"] else [])
     if a.no_publish:
@@ -276,7 +300,7 @@ def main():
         return
     print("  Publishing ...", end="", flush=True)
     publish(title, changed)
-    print(" pushed. It'll be on lukeschnipper.xyz/store in about a minute.\n")
+    print(f" pushed. lukeschnipper.xyz/{page} and the store update in about a minute.\n")
 
 
 if __name__ == "__main__":

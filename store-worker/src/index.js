@@ -8,7 +8,7 @@
 
 const FORMATS = {
   mp3:  { label: "MP3",  detail: "320 kbps · plays everywhere",      type: "audio/mpeg" },
-  aac:  { label: "AAC",  detail: "256 kbps .m4a · great on Apple",   type: "audio/mp4", ext: "m4a" },
+  aac:  { label: "AAC",  detail: ".m4a · smaller, great on Apple",   type: "audio/mp4", ext: "m4a" },
   wav:  { label: "WAV",  detail: "Lossless · best for editing",      type: "audio/wav" },
   aiff: { label: "AIFF", detail: "Lossless · Logic and GarageBand",  type: "audio/aiff" },
 };
@@ -55,7 +55,7 @@ async function checkout(request, env, cors) {
     "metadata[track_id]": track.id,
     "payment_intent_data[metadata][track_id]": track.id,
     allow_promotion_codes: "true",
-    success_url: `${site}/download.html?session_id={CHECKOUT_SESSION_ID}`,
+    success_url: `${site}/${track.page || "download.html"}?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${site}/store.html?cancelled=${encodeURIComponent(track.id)}`,
   };
   if (track.description) params["line_items[0][price_data][product_data][description]"] = String(track.description).slice(0, 500);
@@ -88,9 +88,15 @@ async function order(url, env, cors) {
     return json({ error: `This download page expired ${days} days after purchase.`, code: "expired" }, 410, cors);
   }
 
-  const trackId = session.metadata && session.metadata.track_id;
-  if (!TRACK_ID.test(trackId || "")) throw new Error(`session ${sessionId} has no track_id`);
   const cat = await loadCatalog(env);
+  // Sessions from our own checkout carry metadata.track_id; Stripe Payment Link sessions are
+  // matched to a track by the link's URL (store/tracks.json "payment_link").
+  let trackId = session.metadata && session.metadata.track_id;
+  if (!trackId && session.payment_link) trackId = await trackIdFromPaymentLink(env, session.payment_link, cat);
+  if (!TRACK_ID.test(trackId || "")) {
+    console.error(`session ${sessionId} doesn't match any track (payment_link: ${session.payment_link})`);
+    return json({ error: "Your payment went through, but I couldn't tell which song it was for. Email me and I'll send it right away.", code: "unknown_track" }, 500, cors);
+  }
   // Honour the purchase even if the track has since been hidden or removed from the catalog.
   const track = cat.tracks.get(trackId) || { id: trackId, title: trackId };
 
@@ -107,7 +113,7 @@ async function order(url, env, cors) {
   }
 
   return json({
-    track: { id: track.id, title: track.title, artist: cat.artist,
+    track: { id: track.id, title: track.title, artist: cat.artist, page: track.page || null,
              cover: track.cover ? new URL(track.cover, env.SITE_ORIGIN + "/").href : null },
     email: (session.customer_details && session.customer_details.email) || null,
     expires: new Date(expiresAt * 1000).toISOString(),
@@ -140,6 +146,17 @@ async function file(url, env) {
 }
 
 // ---------- helpers ----------
+
+async function trackIdFromPaymentLink(env, paymentLinkId, cat) {
+  if (!/^plink_[A-Za-z0-9]+$/.test(paymentLinkId)) return null;
+  const link = await stripe(env, "GET", `payment_links/${paymentLinkId}`);
+  const norm = u => { try { const x = new URL(u); return x.host.toLowerCase() + x.pathname.replace(/\/+$/, ""); } catch { return ""; } };
+  const target = norm(link.url);
+  for (const t of cat.tracks.values()) {
+    if (t.payment_link && norm(t.payment_link) === target) return t.id;
+  }
+  return null;
+}
 
 function objectKey(trackId, fmt) {
   return `tracks/${trackId}/${trackId}.${FORMATS[fmt].ext || fmt}`;

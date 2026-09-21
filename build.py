@@ -6,7 +6,7 @@
 - Copies everything in music/.
 - Writes data/photos.json and data/music.json, which portfolio.html reads.
 """
-import json, re, shutil, subprocess, time
+import html, json, re, shutil, subprocess, time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -98,6 +98,31 @@ def build_music():
     return items
 
 
+def build_track_pages():
+    """One page per store track with a "page" field, e.g. /wunderinwun, from templates/track.html."""
+    tpl_path, cat_path = ROOT / "templates" / "track.html", ROOT / "store" / "tracks.json"
+    if not (tpl_path.exists() and cat_path.exists()):
+        return
+    cat, tpl = json.loads(cat_path.read_text()), tpl_path.read_text()
+    reserved = {p.stem for p in ROOT.glob("*.html")}
+    for t in cat.get("tracks", []):
+        page = t.get("page")
+        if not page:
+            continue
+        if not re.fullmatch(r"[a-z0-9-]{1,60}", page) or page in reserved:
+            print(f"skip   page {page!r} for {t.get('id')}: invalid name or clashes with an existing page")
+            continue
+        artist = cat.get("artist", "Luke Schnipper")
+        desc = t.get("description") or f"{t['title']} by {artist}. Listen to a preview and buy the download."
+        image = f"https://lukeschnipper.xyz/{t['cover']}" if t.get("cover") else "https://lukeschnipper.xyz/img/avatar.jpg"
+        out = tpl
+        for key, val in {"TRACK_ID": t["id"], "TITLE": t["title"], "DESCRIPTION": desc,
+                         "URL": f"https://lukeschnipper.xyz/{page}", "IMAGE": image}.items():
+            out = out.replace("{{" + key + "}}", html.escape(val, quote=True))
+        (OUT / f"{page}.html").write_text(out)
+        print(f"page   /{page}")
+
+
 def main():
     if OUT.exists():
         shutil.rmtree(OUT)
@@ -116,6 +141,7 @@ def main():
     data = OUT / "data"; data.mkdir()
     (data / "photos.json").write_text(json.dumps(build_photos(), indent=1))
     (data / "music.json").write_text(json.dumps(build_music(), indent=1))
+    build_track_pages()
     print("built ->", OUT)
 
 

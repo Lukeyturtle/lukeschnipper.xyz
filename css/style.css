@@ -172,3 +172,14 @@ a.card:hover { text-decoration: none; transform: translateY(-2px); border-color:
 .format .size { grid-area: size; color: var(--accent); font-size: .9rem; font-weight: 600; }
 .format .det { grid-area: det; color: var(--muted); font-size: .82rem; }
 @media (max-width: 640px) { .dl-card { grid-template-columns: 1fr; } .dl-card .cover { max-width: 220px; } }
+
+/* Track page (/songname) */
+.track-hero { display: grid; grid-template-columns: 280px 1fr; gap: 28px; align-items: center; }
+.track-hero .cover { border-radius: var(--radius); border: 1px solid var(--line); }
+.track-info h1 { margin: 6px 0 4px; }
+.track-info .product-desc { margin: 10px 0 14px; }
+.track-info audio { width: 100%; max-width: 420px; display: block; }
+#tp-buy-wrap { margin-top: 16px; }
+.dl-panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; margin-bottom: 18px; scroll-margin-top: 90px; }
+.dl-panel h2 { margin: 0; }
+@media (max-width: 640px) { .track-hero { grid-template-columns: 1fr; } .track-hero .cover { max-width: 280px; } }

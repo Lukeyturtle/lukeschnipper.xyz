@@ -35,15 +35,19 @@ Export the master as WAV or AIFF at whatever quality you mixed at (24-bit is kep
 
 To change a price, hide a track (`"available": false`, past buyers can still download) or switch currency (default GBP), edit `store/tracks.json`, on GitHub is fine.
 
-### Quick option: sell with a Stripe Payment Link (no Cloudflare needed)
+### Selling with a Stripe Payment Link
 
 ```bash
-cd ~/Projects/luka-site && python3 tools/add_track.py --payment-link https://buy.stripe.com/...
+cd ~/Projects/luka-site && python3 tools/add_track.py --payment-link https://buy.stripe.com/... --page songname
 ```
 
-The Buy button goes straight to that Payment Link. Stripe doesn't deliver files, so the tool saves the four formats to a folder on your Desktop: upload it to Google Drive or Dropbox, share it as "anyone with the link", and set that as the Payment Link's after-payment redirect (Stripe > Payment Links > edit > After payment > Don't show confirmation page > redirect). Trade-off: the folder link never expires, so a buyer could pass it on. Tracks without `payment_link` use the full store below.
+Every track gets its own page, e.g. lukeschnipper.xyz/songname (good for YouTube descriptions). The tool prints the redirect to paste into the Payment Link (Stripe > Payment Links > edit > After payment > Don't show confirmation page):
 
-### How buying works (full store)
+    https://lukeschnipper.xyz/songname?session_id={CHECKOUT_SESSION_ID}
+
+Buyers land back on the song page, which asks the store API to confirm the payment before showing downloads. Visitors without a paid session just see the preview and Buy button. Keep the price in `store/tracks.json` the same as the Payment Link's price.
+
+### How buying works
 
 Store page -> Stripe Checkout -> `download.html?session_id=...`. The download page asks the store API (`store-worker/`, a Cloudflare Worker) to confirm with Stripe that the order is paid, then shows a button per format. Each button is a signed link that expires after 6 hours. The download page itself works for 30 days after purchase (`DOWNLOAD_DAYS` in `store-worker/wrangler.toml`).
 
