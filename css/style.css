@@ -143,3 +143,32 @@ a.card:hover { text-decoration: none; transform: translateY(-2px); border-color:
 .lb-close { position: absolute; top: 14px; right: 18px; background: none; border: 0; color: #fff; font-size: 2.2rem; cursor: pointer; line-height: 1; }
 .track-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .track-meta { color: var(--muted); font-size: .85rem; }
+
+/* Store */
+.notice { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; }
+.notice.error { border-left-color: #f87171; }
+.fine-print { color: var(--muted); font-size: .88rem; margin: 22px 0 0; }
+.store-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.product { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
+.cover { aspect-ratio: 1; background: linear-gradient(135deg, #1e2230, #2d2446); display: grid; place-items: center; color: var(--accent-2); font-size: 3rem; overflow: hidden; }
+.cover img { width: 100%; height: 100%; object-fit: cover; }
+.product-body { padding: 18px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.product-body h3 { margin: 0; font-size: 1.15rem; }
+.product-meta { color: var(--muted); font-size: .85rem; margin: 0; }
+.product-desc { margin: 0; color: var(--text); font-size: .95rem; }
+.product audio { width: 100%; margin-top: 6px; }
+.preview-note { color: var(--muted); font-size: .75rem; margin-top: -4px; }
+.product .buy { margin-top: auto; justify-content: center; border: 0; cursor: pointer; font: inherit; font-weight: 600; }
+.btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+
+/* Download page */
+.dl-card { display: grid; grid-template-columns: 220px 1fr; gap: 24px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; margin-bottom: 18px; }
+.dl-card .cover { border-radius: 10px; }
+.dl-body h2 { margin: 0 0 2px; }
+.formats { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-top: 16px; }
+.format { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "fmt size" "det det"; gap: 2px 10px; padding: 14px 16px; border-radius: 12px; background: var(--bg-2); border: 1px solid var(--line); color: var(--text); transition: border-color .12s ease, transform .12s ease; }
+.format:hover { text-decoration: none; border-color: var(--accent); transform: translateY(-1px); }
+.format .fmt { grid-area: fmt; font-weight: 700; font-size: 1.05rem; }
+.format .size { grid-area: size; color: var(--accent); font-size: .9rem; font-weight: 600; }
+.format .det { grid-area: det; color: var(--muted); font-size: .82rem; }
+@media (max-width: 640px) { .dl-card { grid-template-columns: 1fr; } .dl-card .cover { max-width: 220px; } }

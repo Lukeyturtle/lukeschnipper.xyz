@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your download | Luke Schnipper</title>
+<meta name="description" content="Download your purchase.">
+<link rel="canonical" href="https://lukeschnipper.xyz/download.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Luke Schnipper">
+<meta property="og:title" content="Your download | Luke Schnipper">
+<meta property="og:description" content="Download your purchase.">
+<meta property="og:url" content="https://lukeschnipper.xyz/download.html">
+<meta property="og:image" content="https://lukeschnipper.xyz/img/avatar.jpg">
+<meta name="twitter:card" content="summary">
+<meta name="robots" content="noindex">
+<link rel="icon" href="img/avatar.jpg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="img/avatar.jpg" alt="">Luke Schnipper</a>
+    <nav>
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="youtube.html">YouTube</a></li>
+        <li><a href="portfolio.html">Portfolio</a></li>
+        <li><a href="store.html">Store</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+<main>
+<section class="page-head">
+  <div class="wrap">
+    <h1 id="dl-heading">Your download</h1>
+    <p id="dl-sub">Checking your order…</p>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="dl-card" id="dl-card" hidden>
+      <div class="cover" id="dl-cover"><span aria-hidden="true">♪</span></div>
+      <div class="dl-body">
+        <span class="tag">Purchased</span>
+        <h2 id="dl-track"></h2>
+        <p class="product-meta" id="dl-artist"></p>
+        <div class="formats" id="dl-formats"></div>
+        <p class="fine-print">Not sure which to pick? <b>MP3</b> works everywhere. <b>WAV</b> or <b>AIFF</b> are full studio quality (big files). <b>AAC</b> is smaller and sounds great on iPhone and Mac.</p>
+      </div>
+    </div>
+    <div class="notice" id="dl-keep" hidden></div>
+    <div class="soon" id="dl-error" hidden>
+      <strong id="dl-err-title">Something's not right</strong>
+      <span id="dl-err-msg"></span><br><br>
+      Need help? Email <a href="mailto:buisness@lukaschnitzel.xyz">buisness@lukaschnitzel.xyz</a> with your Stripe receipt and I'll sort it out.
+    </div>
+  </div>
+</section>
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <span>&copy; <span id="year"></span> Luke Schnipper</span>
+    <span>
+      <a href="https://www.youtube.com/channel/UCCg-XvMplxod1Fl-xb_kfGQ" target="_blank" rel="noopener">YouTube</a>
+      &nbsp;&middot;&nbsp;
+      <a href="mailto:general@lukaschnitzel.xyz">general@lukaschnitzel.xyz</a>
+    </span>
+  </div>
+</footer>
+<script>document.getElementById("year").textContent = new Date().getFullYear();</script>
+<script src="store/config.js"></script>
+<script>
+(async () => {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const mb = n => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+  const fail = (title, msg) => { $("dl-sub").textContent = ""; $("dl-err-title").textContent = title; $("dl-err-msg").textContent = msg; $("dl-error").hidden = false; };
+  const loadedAt = Date.now();
+
+  const sid = new URLSearchParams(location.search).get("session_id");
+  if (!sid) return fail("No order found", "This page needs the link you were sent to after paying.");
+  if (!window.STORE_API) return fail("Store isn't open yet", "Downloads aren't switched on yet.");
+
+  let data, res;
+  try {
+    res = await fetch(`${window.STORE_API}/order?session_id=${encodeURIComponent(sid)}`);
+    data = await res.json();
+  } catch { return fail("Couldn't reach the store", "Check your connection and refresh this page."); }
+  if (!res.ok) return fail(res.status === 402 ? "Payment still processing" : "Can't load this order", data.error || "Unknown error.");
+
+  const t = data.track;
+  document.title = `${t.title} | Download`;
+  $("dl-heading").textContent = "Thanks for buying!";
+  $("dl-sub").textContent = "Your track is ready. Pick a format below.";
+  $("dl-track").textContent = t.title;
+  $("dl-artist").textContent = t.artist;
+  if (t.cover) $("dl-cover").innerHTML = `<img src="${esc(t.cover)}" alt="">`;
+  $("dl-formats").innerHTML = data.files.map(f => `
+    <a class="format" href="${esc(f.url)}" data-format="${esc(f.format)}">
+      <span class="fmt">${esc(f.label)}</span>
+      <span class="det">${esc(f.detail)}</span>
+      <span class="size">${mb(f.size)} ↓</span>
+    </a>`).join("");
+  // Individual file links expire after 6 hours; if the page has been open that long, get fresh ones.
+  $("dl-formats").addEventListener("click", e => { if (e.target.closest("a.format") && Date.now() - loadedAt > 5 * 3600e3) { e.preventDefault(); location.reload(); } });
+
+  const until = new Date(data.expires).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+  $("dl-keep").innerHTML = `<b>Bookmark this page.</b> You can come back and download again until <b>${esc(until)}</b>.` +
+    (data.email ? ` Your receipt went to <b>${esc(data.email)}</b>.` : "");
+  $("dl-keep").hidden = false;
+  $("dl-card").hidden = false;
+})();
+</script>
+</body>
+</html>

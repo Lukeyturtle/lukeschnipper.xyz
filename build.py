@@ -106,6 +106,10 @@ def main():
         shutil.copy2(f, OUT / f.name)
     for d in ("css", "img"):
         shutil.copytree(ROOT / d, OUT / d)
+    if (ROOT / "store").exists():
+        # Public store assets only: catalog, config, previews, covers. Masters must never live here.
+        shutil.copytree(ROOT / "store", OUT / "store",
+                        ignore=shutil.ignore_patterns("*.wav", "*.aif", "*.aiff", "*.flac", "*.m4a", "README.md"))
     if (ROOT / "CNAME").exists():
         shutil.copy2(ROOT / "CNAME", OUT / "CNAME")
     (OUT / ".nojekyll").write_text("")

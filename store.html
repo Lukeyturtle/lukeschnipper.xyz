@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Store | Luke Schnipper</title>
-<meta name="description" content="Luke Schnipper merch and store. Opening soon.">
+<meta name="description" content="Buy songs by Luke Schnipper. Download in MP3, AAC, WAV or AIFF.">
 <link rel="canonical" href="https://lukeschnipper.xyz/store.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Luke Schnipper">
 <meta property="og:title" content="Store | Luke Schnipper">
-<meta property="og:description" content="Luke Schnipper merch and store. Opening soon.">
+<meta property="og:description" content="Buy songs by Luke Schnipper. Download in MP3, AAC, WAV or AIFF.">
 <meta property="og:url" content="https://lukeschnipper.xyz/store.html">
 <meta property="og:image" content="https://lukeschnipper.xyz/img/avatar.jpg">
 <meta name="twitter:card" content="summary">
@@ -34,17 +34,21 @@
 <section class="page-head">
   <div class="wrap">
     <h1>Store</h1>
-    <p>Track purchases and other stuff will be here.</p>
+    <p>Songs I've written and produced. Buy once and download in MP3, AAC, WAV or AIFF.</p>
   </div>
 </section>
 
 <section style="padding-top:0">
   <div class="wrap">
-    <div class="soon">
+    <div class="notice" id="cancelled" hidden>No worries, checkout was cancelled and you haven't been charged.</div>
+    <div class="notice error" id="store-error" hidden></div>
+    <div class="store-grid" id="store-grid"></div>
+    <div class="soon" id="store-empty" hidden>
       <span class="tag">Coming soon</span>
-      <strong>The store isn't open yet</strong>
+      <strong>No tracks for sale yet</strong>
       Until then, the best way to support the channel is to <a href="https://www.youtube.com/channel/UCCg-XvMplxod1Fl-xb_kfGQ?sub_confirmation=1" target="_blank" rel="noopener">subscribe on YouTube</a>. Business enquiries: <a href="mailto:buisness@lukaschnitzel.xyz">buisness@lukaschnitzel.xyz</a>.
     </div>
+    <p class="fine-print">Payments are handled securely by Stripe. After paying you'll land on a download page with every format. Questions or problems: <a href="mailto:buisness@lukaschnitzel.xyz">buisness@lukaschnitzel.xyz</a>.</p>
   </div>
 </section>
 </main>
@@ -59,5 +63,57 @@
   </div>
 </footer>
 <script>document.getElementById("year").textContent = new Date().getFullYear();</script>
+<script src="store/config.js"></script>
+<script>
+(async () => {
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const grid = document.getElementById("store-grid"), errBox = document.getElementById("store-error");
+  const params = new URLSearchParams(location.search);
+  if (params.has("cancelled")) document.getElementById("cancelled").hidden = false;
+
+  let cat = { tracks: [] };
+  try { const r = await fetch("store/tracks.json", { cache: "no-cache" }); if (r.ok) cat = await r.json(); } catch {}
+  const tracks = (cat.tracks || []).filter(t => t.available !== false);
+  if (!tracks.length) { document.getElementById("store-empty").hidden = false; return; }
+
+  const money = new Intl.NumberFormat(undefined, { style: "currency", currency: (cat.currency || "usd").toUpperCase() });
+  const mmss = s => s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : "";
+  const open = !!window.STORE_API;
+
+  grid.innerHTML = tracks.map(t => `
+    <article class="product" id="t-${esc(t.id)}">
+      <div class="cover">${t.cover ? `<img src="${esc(t.cover)}" alt="${esc(t.title)} cover" loading="lazy">` : `<span aria-hidden="true">♪</span>`}</div>
+      <div class="product-body">
+        <h3>${esc(t.title)}</h3>
+        <p class="product-meta">${[mmss(t.duration), (t.formats || []).map(f => f.toUpperCase()).join(" · ")].filter(Boolean).join("  ·  ")}</p>
+        ${t.description ? `<p class="product-desc">${esc(t.description)}</p>` : ""}
+        ${t.preview ? `<audio controls preload="none" src="${esc(t.preview)}"></audio><span class="preview-note">30-second preview</span>` : ""}
+        <button class="btn primary buy" data-id="${esc(t.id)}" data-label="Buy · ${esc(money.format(t.price))}" ${open ? "" : "disabled"}>
+          ${open ? `Buy · ${esc(money.format(t.price))}` : "Opening soon"}
+        </button>
+      </div>
+    </article>`).join("");
+
+  const reset = () => grid.querySelectorAll("button.buy").forEach(b => { if (open) { b.disabled = false; b.textContent = b.dataset.label; } });
+  window.addEventListener("pageshow", reset);  // coming back from Stripe with the Back button
+
+  grid.addEventListener("click", async e => {
+    const btn = e.target.closest("button.buy");
+    if (!btn || btn.disabled) return;
+    errBox.hidden = true;
+    btn.disabled = true; btn.textContent = "Opening checkout…";
+    try {
+      const r = await fetch(`${window.STORE_API}/checkout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: btn.dataset.id }) });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.url) throw new Error(data.error || "Couldn't start checkout.");
+      location.href = data.url;
+    } catch (err) {
+      errBox.textContent = `${err.message} If this keeps happening, email buisness@lukaschnitzel.xyz.`;
+      errBox.hidden = false;
+      btn.disabled = false; btn.textContent = btn.dataset.label;
+    }
+  });
+})();
+</script>
 </body>
 </html>

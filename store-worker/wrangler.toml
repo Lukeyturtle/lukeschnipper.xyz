@@ -1,0 +1,16 @@
+# Store API for lukeschnipper.xyz: Stripe Checkout + private downloads from R2.
+# Secrets (never in this file): STRIPE_SECRET_KEY, DOWNLOAD_SIGNING_KEY. Set with `npx wrangler secret put NAME`.
+name = "luke-store"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+[vars]
+SITE_ORIGIN = "https://lukeschnipper.xyz"
+CATALOG_URL = "https://lukeschnipper.xyz/store/tracks.json"
+# How long a buyer's download page keeps working after purchase.
+DOWNLOAD_DAYS = "30"
+STRIPE_API = "https://api.stripe.com"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "luke-store-tracks"
