@@ -150,7 +150,7 @@ async function loadCatalog(env) {
   if (!res.ok) throw new Error(`catalog fetch failed: ${res.status}`);
   const cat = await res.json();
   return {
-    currency: String(cat.currency || "usd").toLowerCase(),
+    currency: String(cat.currency || "gbp").toLowerCase(),
     artist: cat.artist || "Luke Schnipper",
     tracks: new Map((cat.tracks || []).filter(t => TRACK_ID.test(t.id || "")).map(t => [t.id, t])),
   };

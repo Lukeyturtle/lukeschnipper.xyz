@@ -106,7 +106,8 @@ def make_cover(src, dest_public, dest_embed):
 def encode(master, info, work, tid, title, embed_cover):
     year = str(datetime.date.today().year)
     tags = ["-metadata", f"title={title}", "-metadata", f"artist={ARTIST}", "-metadata", f"album_artist={ARTIST}",
-            "-metadata", f"date={year}"]
+            "-metadata", f"date={year}", "-metadata", f"copyright=© {year} {ARTIST}. All rights reserved.",
+            "-metadata", "comment=Personal listening licence. No sharing or re-uploading. lukeschnipper.xyz"]
     pcm = "24" if info["bits"] == 24 else "16"
     lossy_rate = ["-ar", "48000"] if info["rate"] > 48000 else []
     aac_codec = "aac_at" if "aac_at" in run(["ffmpeg", "-hide_banner", "-encoders"]) else "aac"
@@ -157,7 +158,7 @@ def upload(files, tid, local):
 def load_catalog():
     if CATALOG.exists():
         return json.loads(CATALOG.read_text())
-    return {"currency": "usd", "artist": ARTIST, "tracks": []}
+    return {"currency": "gbp", "artist": ARTIST, "tracks": []}
 
 
 def publish(title, paths):
@@ -176,11 +177,20 @@ def main():
     ap.add_argument("--preview-start", help="where the 30s preview starts, e.g. 45 or 1:05")
     ap.add_argument("--preview-length", type=float, default=30)
     ap.add_argument("--id", help="URL id (defaults to the title, e.g. 'late-night-drive')")
+    ap.add_argument("--payment-link", help="sell with this Stripe Payment Link (https://buy.stripe.com/...) instead of the store API")
+    ap.add_argument("--export", help="also save the four buyer files to this folder (default with --payment-link: your Desktop)")
     ap.add_argument("--local", action="store_true", help="upload to the local dev bucket instead of R2")
     ap.add_argument("--no-upload", action="store_true"); ap.add_argument("--no-publish", action="store_true")
     ap.add_argument("-y", "--yes", action="store_true", help="don't ask for confirmation")
     a = ap.parse_args()
 
+    link = (a.payment_link or "").strip()
+    if link:
+        if not link.startswith("https://"):
+            die("A Payment Link should start with https:// (usually https://buy.stripe.com/...).")
+        if not link.startswith("https://buy.stripe.com/"):
+            print(f"  ! {link} isn't a buy.stripe.com address. Using it anyway.")
+        a.no_upload = True  # Payment Link tracks are delivered by the link's after-payment redirect, not R2
     for tool in ("ffmpeg", "ffprobe"):
         if not shutil.which(tool):
             die(f"{tool} isn't installed. Run: brew install ffmpeg")
@@ -199,7 +209,7 @@ def main():
     tid = slug(a.id or title)
     existing = next((t for t in catalog["tracks"] if t["id"] == tid), None)
     price_default = str(existing["price"]) if existing else "1.99"
-    price_raw = a.price or ask(f"Price ({catalog.get('currency', 'usd').upper()})", price_default)
+    price_raw = a.price or ask(f"Price ({catalog.get('currency', 'gbp').upper()})", price_default)
     try:
         price = round(float(str(price_raw).lstrip("$£€")), 2)
     except ValueError:
@@ -214,7 +224,7 @@ def main():
     pstart = parse_time(a.preview_start if a.preview_start is not None else ask("Preview starts at (seconds or m:ss)", "0"))
 
     mins, secs = divmod(int(info["duration"]), 60)
-    print(f"\n  {title}  ·  {price:.2f} {catalog.get('currency', 'usd').upper()}  ·  {mins}:{secs:02d}"
+    print(f"\n  {title}  ·  {price:.2f} {catalog.get('currency', 'gbp').upper()}  ·  {mins}:{secs:02d}"
           f"  ·  {info['rate'] // 1000} kHz / {info['bits']}-bit  ·  id: {tid}")
     if existing:
         print("  ! A track with this id already exists. Its files and listing will be replaced.")
@@ -235,6 +245,12 @@ def main():
         preview = STORE / "previews" / f"{tid}.mp3"
         make_preview(master, info, preview, pstart, a.preview_length)
         print(f"    preview   ... {preview.stat().st_size / 1024:.0f} KB (public)")
+        export_dir = Path(a.export).expanduser() if a.export else (Path.home() / "Desktop" / f"{title} - buyer files" if link else None)
+        if export_dir:
+            export_dir.mkdir(parents=True, exist_ok=True)
+            for ext, path in files.items():
+                shutil.copy2(path, export_dir / f"{ARTIST} - {title}.{ext}".replace("/", "-"))
+            print(f"\n  Buyer files saved to {export_dir}")
         if not a.no_upload:
             print("\n  Uploading full-quality files (private)")
             upload(files, tid, a.local)
@@ -248,6 +264,8 @@ def main():
         "released": existing["released"] if existing else datetime.date.today().isoformat(),
         "available": True,
     }
+    if link:
+        entry["payment_link"] = link
     catalog["tracks"] = [entry] + [t for t in catalog["tracks"] if t["id"] != tid]
     CATALOG.write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + "\n")
     print(f"\n  Added to {CATALOG.relative_to(ROOT)}")

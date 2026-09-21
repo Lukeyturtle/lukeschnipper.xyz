@@ -48,13 +48,14 @@
       <strong>No tracks for sale yet</strong>
       Until then, the best way to support the channel is to <a href="https://www.youtube.com/channel/UCCg-XvMplxod1Fl-xb_kfGQ?sub_confirmation=1" target="_blank" rel="noopener">subscribe on YouTube</a>. Business enquiries: <a href="mailto:buisness@lukaschnitzel.xyz">buisness@lukaschnitzel.xyz</a>.
     </div>
-    <p class="fine-print">Payments are handled securely by Stripe. After paying you'll land on a download page with every format. Questions or problems: <a href="mailto:buisness@lukaschnitzel.xyz">buisness@lukaschnitzel.xyz</a>.</p>
+    <p class="fine-print">Payments are handled securely by Stripe. Questions or problems: <a href="mailto:buisness@lukaschnitzel.xyz">buisness@lukaschnitzel.xyz</a>.</p>
+    <p class="fine-print"><b>Licence.</b> All music &copy; Luke Schnipper, all rights reserved. Buying a track gets you a personal licence: listen as much as you like on your own devices. Sharing or re-uploading the files, or using a track in videos, streams, games or other projects, needs a separate licence. Want to use one in your project? Email <a href="mailto:buisness@lukaschnitzel.xyz">buisness@lukaschnitzel.xyz</a>.</p>
   </div>
 </section>
 </main>
 <footer class="site-footer">
   <div class="wrap">
-    <span>&copy; <span id="year"></span> Luke Schnipper</span>
+    <span>&copy; <span id="year"></span> Luke Schnipper. All rights reserved.</span>
     <span>
       <a href="https://www.youtube.com/channel/UCCg-XvMplxod1Fl-xb_kfGQ" target="_blank" rel="noopener">YouTube</a>
       &nbsp;&middot;&nbsp;
@@ -88,9 +89,11 @@
         <p class="product-meta">${[mmss(t.duration), (t.formats || []).map(f => f.toUpperCase()).join(" · ")].filter(Boolean).join("  ·  ")}</p>
         ${t.description ? `<p class="product-desc">${esc(t.description)}</p>` : ""}
         ${t.preview ? `<audio controls preload="none" src="${esc(t.preview)}"></audio><span class="preview-note">30-second preview</span>` : ""}
-        <button class="btn primary buy" data-id="${esc(t.id)}" data-label="Buy · ${esc(money.format(t.price))}" ${open ? "" : "disabled"}>
-          ${open ? `Buy · ${esc(money.format(t.price))}` : "Opening soon"}
-        </button>
+        ${/^https:\/\//.test(t.payment_link || "")
+          ? `<a class="btn primary buy" href="${esc(t.payment_link)}">Buy · ${esc(money.format(t.price))}</a>`
+          : `<button class="btn primary buy" data-id="${esc(t.id)}" data-label="Buy · ${esc(money.format(t.price))}" ${open ? "" : "disabled"}>
+               ${open ? `Buy · ${esc(money.format(t.price))}` : "Opening soon"}
+             </button>`}
       </div>
     </article>`).join("");
 
