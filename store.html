@@ -15,6 +15,7 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="img/avatar.jpg">
 <link rel="stylesheet" href="css/style.css">
+<script src="https://js.stripe.com/dahlia/stripe.js"></script>
 </head>
 <body>
 <header class="site-header">
@@ -42,6 +43,11 @@
   <div class="wrap">
     <div class="notice" id="cancelled" hidden>No worries, checkout was cancelled and you haven't been charged.</div>
     <div class="notice error" id="store-error" hidden></div>
+    <div class="dl-panel" id="checkout-panel" hidden>
+      <h2 id="checkout-heading">Checkout</h2>
+      <p class="fine-print">Secure payment by Stripe. Your download page opens as soon as the payment goes through. Buying a different track instead? Reload this page.</p>
+      <div id="checkout-form"></div>
+    </div>
     <div class="store-grid" id="store-grid"></div>
     <div class="soon" id="store-empty" hidden>
       <span class="tag">Coming soon</span>
@@ -65,6 +71,7 @@
 </footer>
 <script>document.getElementById("year").textContent = new Date().getFullYear();</script>
 <script src="store/config.js"></script>
+<script src="store/checkout.js"></script>
 <script>
 (async () => {
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -77,9 +84,9 @@
   const tracks = (cat.tracks || []).filter(t => t.available !== false);
   if (!tracks.length) { document.getElementById("store-empty").hidden = false; return; }
 
-  const money = new Intl.NumberFormat(undefined, { style: "currency", currency: (cat.currency || "usd").toUpperCase() });
+  const money = new Intl.NumberFormat(undefined, { style: "currency", currency: (cat.currency || "gbp").toUpperCase() });
   const mmss = s => s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : "";
-  const open = !!window.STORE_API;
+  const open = typeof window.storeCheckoutReady === "function" && window.storeCheckoutReady();
 
   grid.innerHTML = tracks.map(t => `
     <article class="product" id="t-${esc(t.id)}">
@@ -98,22 +105,29 @@
     </article>`).join("");
 
   const reset = () => grid.querySelectorAll("button.buy").forEach(b => { if (open) { b.disabled = false; b.textContent = b.dataset.label; } });
-  window.addEventListener("pageshow", reset);  // coming back from Stripe with the Back button
+  window.addEventListener("pageshow", () => { if (document.getElementById("checkout-panel").hidden) reset(); });
 
+  const panel = document.getElementById("checkout-panel");
   grid.addEventListener("click", async e => {
     const btn = e.target.closest("button.buy");
     if (!btn || btn.disabled) return;
     errBox.hidden = true;
-    btn.disabled = true; btn.textContent = "Opening checkout…";
+    // One form per page load: every Buy button waits while this one is open.
+    grid.querySelectorAll("button.buy").forEach(b => { b.disabled = true; });
+    btn.textContent = "Opening checkout…";
     try {
-      const r = await fetch(`${window.STORE_API}/checkout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: btn.dataset.id }) });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok || !data.url) throw new Error(data.error || "Couldn't start checkout.");
-      location.href = data.url;
+      const t = tracks.find(x => x.id === btn.dataset.id);
+      document.getElementById("checkout-heading").textContent = t ? `Buy ${t.title}` : "Checkout";
+      panel.hidden = false;
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      await window.mountStoreCheckout(btn.dataset.id, "#checkout-form");
+      btn.textContent = "Paying below…";
     } catch (err) {
+      panel.hidden = true;
+      document.getElementById("checkout-form").innerHTML = "";
       errBox.textContent = `${err.message} If this keeps happening, email buisness@lukaschnitzel.xyz.`;
       errBox.hidden = false;
-      btn.disabled = false; btn.textContent = btn.dataset.label;
+      reset();
     }
   });
 })();

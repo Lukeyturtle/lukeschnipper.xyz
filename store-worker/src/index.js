@@ -1,6 +1,6 @@
 // Store API for lukeschnipper.xyz.
 //
-//   POST /checkout  {id}          -> starts a Stripe Checkout session for one track, returns {url}
+//   POST /checkout  {id}          -> starts a Stripe Checkout session for one track, returns {client_secret}
 //   GET  /order?session_id=cs_... -> confirms the session is paid, returns short-lived download links
 //   GET  /file?token=...          -> streams one file from the private R2 bucket
 //
@@ -16,6 +16,8 @@ const FORMAT_ORDER = ["mp3", "aac", "wav", "aiff"];
 const LINK_TTL_SECONDS = 6 * 60 * 60;
 const ZERO_DECIMAL = new Set(["bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf"]);
 const TRACK_ID = /^[a-z0-9-]{1,80}$/;
+// Required by the embedded custom payment form.
+const STRIPE_API_VERSION = "2026-03-25.dahlia; custom_checkout_payment_form_preview=v1";
 
 export default {
   async fetch(request, env) {
@@ -47,22 +49,29 @@ async function checkout(request, env, cors) {
 
   const site = env.SITE_ORIGIN;
   const params = {
+    // Embedded custom payment form: the browser mounts the form with session.client_secret.
+    ui_mode: "form",
     mode: "payment",
     "line_items[0][quantity]": "1",
     "line_items[0][price_data][currency]": cat.currency,
     "line_items[0][price_data][unit_amount]": String(amount),
     "line_items[0][price_data][product_data][name]": `${track.title} (digital download)`,
+    billing_address_collection: "auto",
+    "phone_number_collection[enabled]": "false",
+    "automatic_tax[enabled]": "false",
+    submit_type: "auto",
+    "name_collection[individual][enabled]": "true",
+    "name_collection[individual][optional]": "true",
+    integration_identifier: "custom_embedded_web_0001",
     "metadata[track_id]": track.id,
     "payment_intent_data[metadata][track_id]": track.id,
-    allow_promotion_codes: "true",
-    success_url: `${site}/${track.page || "download.html"}?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${site}/store.html?cancelled=${encodeURIComponent(track.id)}`,
+    return_url: `${site}/${track.page || "download.html"}?session_id={CHECKOUT_SESSION_ID}`,
   };
   if (track.description) params["line_items[0][price_data][product_data][description]"] = String(track.description).slice(0, 500);
   if (track.cover) params["line_items[0][price_data][product_data][images][0]"] = new URL(track.cover, site + "/").href;
 
   const session = await stripe(env, "POST", "checkout/sessions", params);
-  return json({ url: session.url }, 200, cors);
+  return json({ client_secret: session.client_secret }, 200, cors);
 }
 
 async function order(url, env, cors) {
@@ -175,7 +184,7 @@ async function loadCatalog(env) {
 
 async function stripe(env, method, path, params) {
   if (!env.STRIPE_SECRET_KEY) throw new Error("STRIPE_SECRET_KEY is not set");
-  const init = { method, headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` } };
+  const init = { method, headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, "Stripe-Version": STRIPE_API_VERSION } };
   if (params) {
     init.body = new URLSearchParams(params);
     init.headers["Content-Type"] = "application/x-www-form-urlencoded";
