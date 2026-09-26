@@ -179,6 +179,7 @@ def main():
     ap.add_argument("--title"); ap.add_argument("--price"); ap.add_argument("--description")
     ap.add_argument("--cover", help="square-ish image for the cover (jpg/png)")
     ap.add_argument("--preview-start", help="where the 30s preview starts, e.g. 45 or 1:05")
+    ap.add_argument("--no-preview", action="store_true", help="don't make a public preview clip")
     ap.add_argument("--preview-length", type=float, default=30)
     ap.add_argument("--id", help="URL id (defaults to the title, e.g. 'late-night-drive')")
     ap.add_argument("--payment-link", help="Stripe Payment Link (https://buy.stripe.com/...) for the Buy button")
@@ -240,7 +241,8 @@ def main():
     cover_src = clean_path(cover_raw) if cover_raw else None
     if cover_src and not cover_src.is_file():
         die(f"Can't find {cover_src}")
-    pstart = parse_time(a.preview_start if a.preview_start is not None else ask("Preview starts at (seconds or m:ss)", "0"))
+    pstart = 0 if a.no_preview else parse_time(
+        a.preview_start if a.preview_start is not None else ask("Preview starts at (seconds or m:ss)", "0"))
 
     mins, secs = divmod(int(info["duration"]), 60)
     print(f"\n  {title}  ·  {price:.2f} {catalog.get('currency', 'gbp').upper()}  ·  {mins}:{secs:02d}"
@@ -263,8 +265,11 @@ def main():
         print("\n  Making formats")
         files = encode(master, info, work, tid, title, embed, formats)
         preview = STORE / "previews" / f"{tid}.mp3"
-        make_preview(master, info, preview, pstart, a.preview_length)
-        print(f"    preview   ... {preview.stat().st_size / 1024:.0f} KB (public)")
+        if a.no_preview:
+            preview.unlink(missing_ok=True)
+        else:
+            make_preview(master, info, preview, pstart, a.preview_length)
+            print(f"    preview   ... {preview.stat().st_size / 1024:.0f} KB (public)")
         export_dir = Path(a.export).expanduser() if a.export else None
         if export_dir:
             export_dir.mkdir(parents=True, exist_ok=True)
@@ -278,7 +283,7 @@ def main():
     entry = {
         "id": tid, "title": title, "price": price, "description": description or "",
         "cover": f"store/covers/{tid}.jpg" if (cover_src or (existing and existing.get("cover"))) else "",
-        "preview": f"store/previews/{tid}.mp3",
+        "preview": "" if a.no_preview else f"store/previews/{tid}.mp3",
         "formats": formats,
         "page": page,
         "duration": round(info["duration"]),
@@ -294,7 +299,8 @@ def main():
         print("\n  In Stripe, set this Payment Link's After payment redirect to:")
         print(f"    https://lukeschnipper.xyz/{page}?session_id={{CHECKOUT_SESSION_ID}}")
 
-    changed = [CATALOG, STORE / "previews" / f"{tid}.mp3"] + ([STORE / "covers" / f"{tid}.jpg"] if entry["cover"] else [])
+    changed = [CATALOG] + ([] if a.no_preview else [STORE / "previews" / f"{tid}.mp3"]) \
+        + ([STORE / "covers" / f"{tid}.jpg"] if entry["cover"] else [])
     if a.no_publish:
         print("  Not published (--no-publish). Commit and push when you're ready.\n")
         return
