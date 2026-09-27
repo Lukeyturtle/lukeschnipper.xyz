@@ -48,7 +48,8 @@
       "page": "orach",
       "released": "2026-09-27",
       "available": true,
-      "type": "album"
+      "type": "album",
+      "total": 11
     },
     {
       "id": "wunder-in-wun",

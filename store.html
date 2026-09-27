@@ -46,6 +46,11 @@
     <div class="dl-panel" id="checkout-panel" hidden>
       <h2 id="checkout-heading">Checkout</h2>
       <p class="fine-print">Secure payment by Stripe. Your download page opens as soon as the payment goes through. Buying a different track instead? Reload this page.</p>
+            <div class="promo">
+        <input id="promo-input" type="text" placeholder="Discount code" autocomplete="off" autocapitalize="characters">
+        <button id="promo-apply" type="button" class="btn">Apply</button>
+        <span id="promo-msg" class="promo-msg"></span>
+      </div>
       <div id="checkout-form"></div>
     </div>
     <div class="store-grid" id="store-grid"></div>
@@ -94,7 +99,7 @@
       <div class="product-body">
         <h3>${t.page ? `<a href="${esc(t.page)}">${esc(t.title)}</a>` : esc(t.title)}</h3>
         <p class="product-meta">${t.type === "album"
-          ? `Album · ${(cat.tracks || []).filter(x => x.type !== "album" && x.album === t.id).length} tracks`
+          ? `Album · ${t.total || (cat.tracks || []).filter(x => x.type !== "album" && x.album === t.id).length} tracks`
           : t.preorder ? "Pre-order"
           : [mmss(t.duration), (t.formats || []).map(f => f.toUpperCase()).join(" · ")].filter(Boolean).join("  ·  ")}</p>
         ${t.description ? `<p class="product-desc">${esc(t.description)}</p>` : ""}

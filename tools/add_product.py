@@ -80,6 +80,7 @@ def main():
     ap.add_argument("--album", help="[preorder only] album id this single belongs to")
     ap.add_argument("--description", default="")
     ap.add_argument("--cover", help="square-ish cover image (optional)")
+    ap.add_argument("--total", type=int, help="[album only] planned number of tracks to display (e.g. 11)")
     ap.add_argument("--no-publish", action="store_true")
     a = ap.parse_args()
 
@@ -114,6 +115,9 @@ def main():
     }
     if a.kind == "album":
         entry["type"] = "album"
+        total = a.total if a.total is not None else (existing or {}).get("total")
+        if total:
+            entry["total"] = total
     else:
         entry["type"] = "single"
         entry["preorder"] = True

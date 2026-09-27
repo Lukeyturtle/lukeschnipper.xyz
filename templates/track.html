@@ -57,6 +57,11 @@
     <div class="dl-panel" id="tp-checkout" hidden>
       <h2>Checkout</h2>
       <p class="fine-print">Secure payment by Stripe. Your download appears as soon as the payment goes through.</p>
+            <div class="promo">
+        <input id="promo-input" type="text" placeholder="Discount code" autocomplete="off" autocapitalize="characters">
+        <button id="promo-apply" type="button" class="btn">Apply</button>
+        <span id="promo-msg" class="promo-msg"></span>
+      </div>
       <div id="checkout-form"></div>
     </div>
     <div class="dl-panel" id="tp-downloads" hidden>
@@ -121,10 +126,11 @@
     $("tp-tag").textContent = isAlbum ? "Album" : isPre ? "Pre-order" : "Single";
     if (isAlbum) {
       const songs = albumSongs(t.id), out = songs.filter(released);
-      $("tp-meta").textContent = [cat.artist || "Luke Schnipper", `Album · ${songs.length} track${songs.length === 1 ? "" : "s"}`].join("  ·  ");
+      const total = t.total || songs.length;
+      $("tp-meta").textContent = [cat.artist || "Luke Schnipper", `Album · ${total} track${total === 1 ? "" : "s"}`].join("  ·  ");
       $("tp-extra").innerHTML = songs.length ? `<ul class="tracklist">${songs.map(x =>
         `<li>${esc(x.title)} <span class="ti-state">${released(x) ? "out now" : "coming soon"}</span></li>`).join("")}</ul>
-        <p class="preview-note">Buy once — download each track here as it's released. ${out.length} of ${songs.length} out now.</p>` : "";
+        <p class="preview-note">Buy once — download each track here as it's released. ${out.length} of ${total} out now.</p>` : "";
     } else if (isPre) {
       $("tp-extra").innerHTML = `<p class="preview-note">Not out yet. Pre-order now and download it here the moment it's released.</p>`;
     }

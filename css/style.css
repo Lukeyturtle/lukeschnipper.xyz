@@ -193,3 +193,11 @@ a.card:hover { text-decoration: none; transform: translateY(-2px); border-color:
 .dl-pending { margin-top: 12px; }
 .pending-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); margin-top: 6px; }
 .pending-row span { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+
+/* Discount code box in the checkout panel */
+.promo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+.promo input { flex: 1; min-width: 140px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); font: inherit; }
+.promo .btn { padding: 10px 16px; }
+.promo-msg { font-size: .85rem; color: var(--muted); flex-basis: 100%; }
+.promo-msg.good { color: var(--accent); }
+.promo-msg.bad { color: #f87171; }

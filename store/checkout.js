@@ -62,4 +62,33 @@ window.mountStoreCheckout = async function (trackId, selector) {
       console.error("Payment confirmation error:", error);
     }
   });
+
+  // Optional discount-code box: applies via the Checkout SDK; the form's total updates itself.
+  const applyBtn = document.getElementById("promo-apply");
+  const input = document.getElementById("promo-input");
+  const msg = document.getElementById("promo-msg");
+  const promoBox = document.querySelector(".promo");
+  if (applyBtn && input && !loadActionsResult.actions.applyPromotionCode && promoBox) {
+    promoBox.hidden = true;  // this SDK build can't apply codes — don't show a dead control
+  }
+  if (applyBtn && input && loadActionsResult.actions.applyPromotionCode) {
+    const apply = async () => {
+      const code = input.value.trim();
+      if (!code) return;
+      applyBtn.disabled = true; if (msg) { msg.textContent = "Checking…"; msg.className = "promo-msg"; }
+      try {
+        const res = await loadActionsResult.actions.applyPromotionCode(code);
+        if (res && res.type === "error") {
+          if (msg) { msg.textContent = res.error?.message || "That code isn't valid."; msg.className = "promo-msg bad"; }
+        } else if (msg) {
+          msg.textContent = "Code applied."; msg.className = "promo-msg good";
+        }
+      } catch (e) {
+        if (msg) { msg.textContent = "That code isn't valid."; msg.className = "promo-msg bad"; }
+      }
+      applyBtn.disabled = false;
+    };
+    applyBtn.addEventListener("click", apply);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); apply(); } });
+  }
 };
