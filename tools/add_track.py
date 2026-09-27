@@ -184,6 +184,7 @@ def main():
     ap.add_argument("--id", help="URL id (defaults to the title, e.g. 'late-night-drive')")
     ap.add_argument("--payment-link", help="Stripe Payment Link (https://buy.stripe.com/...) for the Buy button")
     ap.add_argument("--page", help="web address for the song's page, e.g. 'wunderinwun' -> lukeschnipper.xyz/wunderinwun")
+    ap.add_argument("--album", help="album id this track belongs to (e.g. 'orach'); album buyers then get it too")
     ap.add_argument("--formats", help="comma list from mp3,aac,wav,aiff (default: all four, or mp3,aac for a lossy master)")
     ap.add_argument("--export", help="also save the buyer files to this folder")
     ap.add_argument("--local", action="store_true", help="upload to the local dev bucket instead of R2")
@@ -290,6 +291,11 @@ def main():
         "released": existing["released"] if existing else datetime.date.today().isoformat(),
         "available": True,
     }
+    entry["type"] = (existing or {}).get("type", "single")
+    album = slug(a.album) if a.album else (existing or {}).get("album")
+    if album:
+        entry["album"] = album
+    # Uploading real files releases the track: it is no longer a pre-order.
     if link:
         entry["payment_link"] = link
     catalog["tracks"] = [entry] + [t for t in catalog["tracks"] if t["id"] != tid]

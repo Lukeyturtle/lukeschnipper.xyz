@@ -183,3 +183,13 @@ a.card:hover { text-decoration: none; transform: translateY(-2px); border-color:
 .dl-panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; margin-bottom: 18px; scroll-margin-top: 90px; }
 .dl-panel h2 { margin: 0; }
 @media (max-width: 640px) { .track-hero { grid-template-columns: 1fr; } .track-hero .cover { max-width: 280px; } }
+
+/* Store: albums, pre-orders, download groups */
+.tracklist { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 4px; }
+.tracklist li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: .95rem; }
+.tracklist .ti-state { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+.dl-song { margin: 18px 0 8px; font-size: 1rem; }
+.dl-song:first-child { margin-top: 0; }
+.dl-pending { margin-top: 12px; }
+.pending-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); margin-top: 6px; }
+.pending-row span { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }

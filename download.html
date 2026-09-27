@@ -94,17 +94,20 @@
 
   const t = data.track;
   document.title = `${t.title} | Download`;
-  $("dl-heading").textContent = "Thanks for buying!";
-  $("dl-sub").textContent = "Your track is ready. Pick a format below.";
+  $("dl-heading").textContent = data.status === "pending" ? "Thanks for pre-ordering!" : "Thanks for buying!";
+  $("dl-sub").textContent = data.status === "pending" ? "Bookmark this page — your download appears here on release."
+                          : data.status === "partial" ? "Download what's ready; the rest appears here as it's released."
+                          : "Your download is ready. Pick a format below.";
   $("dl-track").textContent = t.title;
   $("dl-artist").textContent = t.artist;
   if (t.cover) $("dl-cover").innerHTML = `<img src="${esc(t.cover)}" alt="">`;
-  $("dl-formats").innerHTML = data.files.map(f => `
-    <a class="format" href="${esc(f.url)}" data-format="${esc(f.format)}">
-      <span class="fmt">${esc(f.label)}</span>
-      <span class="det">${esc(f.detail)}</span>
-      <span class="size">${mb(f.size)} ↓</span>
-    </a>`).join("");
+  const fmtRow = f => `<a class="format" href="${esc(f.url)}" data-format="${esc(f.format)}">`
+    + `<span class="fmt">${esc(f.label)}</span><span class="det">${esc(f.detail)}</span><span class="size">${mb(f.size)} ↓</span></a>`;
+  const multi = (data.items.length + data.pending.length) > 1 || data.track.type === "album";
+  $("dl-formats").innerHTML = data.items.map(it =>
+    `${multi ? `<h3 class="dl-song">${esc(it.title)}</h3>` : ""}<div class="formats">${it.files.map(fmtRow).join("")}</div>`).join("")
+    + (data.pending.length ? `<h3 class="dl-song">Still to come</h3>` + data.pending.map(x => `<div class="pending-row">${esc(x.title)} <span>coming soon</span></div>`).join("") : "")
+    + (data.status === "pending" ? `<p class="preview-note">Nothing to download yet.</p>` : "");
   // Individual file links expire after 6 hours; if the page has been open that long, get fresh ones.
   $("dl-formats").addEventListener("click", e => { if (e.target.closest("a.format") && Date.now() - loadedAt > 5 * 3600e3) { e.preventDefault(); location.reload(); } });
 

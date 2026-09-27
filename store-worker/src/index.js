@@ -1,7 +1,7 @@
 // Store API for lukeschnipper.xyz.
 //
 //   POST /checkout  {id}          -> starts a Stripe Checkout session for one track, returns {client_secret}
-//   GET  /order?session_id=cs_... -> confirms the session is paid, returns short-lived download links
+//   GET  /order?session_id=cs_... -> confirms payment; returns download groups (album = many, pre-order = none yet)
 //   GET  /file?token=...          -> streams one file from the private R2 bucket
 //
 // Prices come from the public catalog (store/tracks.json), never from the browser.
@@ -14,6 +14,8 @@ const FORMATS = {
 };
 const FORMAT_ORDER = ["mp3", "aac", "wav", "aiff"];
 const LINK_TTL_SECONDS = 6 * 60 * 60;
+// Albums and pre-orders can release long after purchase, so their download page stays valid far longer.
+const PREORDER_LINK_DAYS = 730;
 const ZERO_DECIMAL = new Set(["bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf"]);
 const TRACK_ID = /^[a-z0-9-]{1,80}$/;
 // Required by the embedded custom payment form.
@@ -55,7 +57,7 @@ async function checkout(request, env, cors) {
     "line_items[0][quantity]": "1",
     "line_items[0][price_data][currency]": cat.currency,
     "line_items[0][price_data][unit_amount]": String(amount),
-    "line_items[0][price_data][product_data][name]": `${track.title} (digital download)`,
+    "line_items[0][price_data][product_data][name]": `${track.title}${track.type === "album" ? " (album)" : track.preorder ? " (pre-order)" : " (digital download)"}`,
     billing_address_collection: "auto",
     "phone_number_collection[enabled]": "false",
     "automatic_tax[enabled]": "false",
@@ -90,13 +92,6 @@ async function order(url, env, cors) {
     return json({ error: "This payment hasn't gone through yet. If you just paid, refresh this page in a minute.", code: "unpaid" }, 402, cors);
   }
 
-  const now = Math.floor(Date.now() / 1000);
-  const days = Number(env.DOWNLOAD_DAYS || 30);
-  const expiresAt = session.created + days * 86400;
-  if (now > expiresAt) {
-    return json({ error: `This download page expired ${days} days after purchase.`, code: "expired" }, 410, cors);
-  }
-
   const cat = await loadCatalog(env);
   // Sessions from our own checkout carry metadata.track_id; Stripe Payment Link sessions are
   // matched to a track by the link's URL (store/tracks.json "payment_link").
@@ -108,25 +103,38 @@ async function order(url, env, cors) {
   }
   // Honour the purchase even if the track has since been hidden or removed from the catalog.
   const track = cat.tracks.get(trackId) || { id: trackId, title: trackId };
+  const preorderish = track.type === "album" || track.preorder === true;
 
-  const files = [];
-  for (const fmt of FORMAT_ORDER) {
-    const head = await env.BUCKET.head(objectKey(trackId, fmt));
-    if (!head) continue;
-    const token = await sign(env, { t: trackId, f: fmt, e: now + LINK_TTL_SECONDS });
-    files.push({ format: fmt, label: FORMATS[fmt].label, detail: FORMATS[fmt].detail, size: head.size,
-                 url: `${url.origin}/file?token=${token}` });
+  const now = Math.floor(Date.now() / 1000);
+  const days = preorderish ? PREORDER_LINK_DAYS : Number(env.DOWNLOAD_DAYS || 30);
+  const expiresAt = session.created + days * 86400;
+  if (now > expiresAt) {
+    return json({ error: `This download page expired ${days} days after purchase.`, code: "expired" }, 410, cors);
   }
-  if (!files.length) {
+
+  // One download group per deliverable track that has files; the rest are still-to-come.
+  const items = [], pending = [];
+  for (const id of deliverables(cat, track)) {
+    const meta = cat.tracks.get(id) || { id, title: id };
+    const files = await filesForTrack(env, url.origin, id, now);
+    if (files.length) items.push({ id, title: meta.title, files });
+    else pending.push({ id, title: meta.title });
+  }
+  const status = items.length ? (pending.length ? "partial" : "ready") : "pending";
+  // A normal single with no files is a genuine fulfilment failure, not a pre-order.
+  if (status === "pending" && !preorderish) {
     return json({ error: "Your payment went through, but the files for this track are missing. Email us and we'll sort it out right away.", code: "missing" }, 500, cors);
   }
 
   return json({
     track: { id: track.id, title: track.title, artist: cat.artist, page: track.page || null,
+             type: track.type || "single",
              cover: track.cover ? new URL(track.cover, env.SITE_ORIGIN + "/").href : null },
+    status,
     email: (session.customer_details && session.customer_details.email) || null,
     expires: new Date(expiresAt * 1000).toISOString(),
-    files,
+    items,
+    pending,
   }, 200, cors);
 }
 
@@ -169,6 +177,27 @@ async function trackIdFromPaymentLink(env, paymentLinkId, cat) {
 
 function objectKey(trackId, fmt) {
   return `tracks/${trackId}/${trackId}.${FORMATS[fmt].ext || fmt}`;
+}
+
+// Track ids a purchase unlocks: an album unlocks every single tagged with its id; a single is itself.
+function deliverables(cat, track) {
+  if (track.type === "album") {
+    return [...cat.tracks.values()].filter(t => t.type !== "album" && t.album === track.id).map(t => t.id);
+  }
+  return [track.id];
+}
+
+// Signed download links for whichever formats of one track are actually in the bucket.
+async function filesForTrack(env, origin, trackId, now) {
+  const out = [];
+  for (const fmt of FORMAT_ORDER) {
+    const head = await env.BUCKET.head(objectKey(trackId, fmt));
+    if (!head) continue;
+    const token = await sign(env, { t: trackId, f: fmt, e: now + LINK_TTL_SECONDS });
+    out.push({ format: fmt, label: FORMATS[fmt].label, detail: FORMATS[fmt].detail, size: head.size,
+               url: `${origin}/file?token=${token}` });
+  }
+  return out;
 }
 
 async function loadCatalog(env) {

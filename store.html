@@ -93,14 +93,22 @@
       <div class="cover">${t.cover ? `<img src="${esc(t.cover)}" alt="${esc(t.title)} cover" loading="lazy">` : `<span aria-hidden="true">♪</span>`}</div>
       <div class="product-body">
         <h3>${t.page ? `<a href="${esc(t.page)}">${esc(t.title)}</a>` : esc(t.title)}</h3>
-        <p class="product-meta">${[mmss(t.duration), (t.formats || []).map(f => f.toUpperCase()).join(" · ")].filter(Boolean).join("  ·  ")}</p>
+        <p class="product-meta">${t.type === "album"
+          ? `Album · ${(cat.tracks || []).filter(x => x.type !== "album" && x.album === t.id).length} tracks`
+          : t.preorder ? "Pre-order"
+          : [mmss(t.duration), (t.formats || []).map(f => f.toUpperCase()).join(" · ")].filter(Boolean).join("  ·  ")}</p>
         ${t.description ? `<p class="product-desc">${esc(t.description)}</p>` : ""}
         ${t.preview ? `<audio controls preload="none" src="${esc(t.preview)}"></audio><span class="preview-note">30-second preview</span>` : ""}
-        ${/^https:\/\//.test(t.payment_link || "")
-          ? `<a class="btn primary buy" href="${esc(t.payment_link)}">Buy · ${esc(money.format(t.price))}</a>`
-          : `<button class="btn primary buy" data-id="${esc(t.id)}" data-label="Buy · ${esc(money.format(t.price))}" ${open ? "" : "disabled"}>
-               ${open ? `Buy · ${esc(money.format(t.price))}` : "Opening soon"}
-             </button>`}
+        ${(() => {
+          const label = t.type === "album" ? `Buy the album · ${money.format(t.price)}`
+                      : t.preorder ? `Pre-order · ${money.format(t.price)}`
+                      : `Buy · ${money.format(t.price)}`;
+          return /^https:\/\//.test(t.payment_link || "")
+            ? `<a class="btn primary buy" href="${esc(t.payment_link)}">${esc(label)}</a>`
+            : `<button class="btn primary buy" data-id="${esc(t.id)}" data-label="${esc(label)}" ${open ? "" : "disabled"}>
+                 ${open ? esc(label) : "Opening soon"}
+               </button>`;
+        })()}
       </div>
     </article>`).join("");
 

@@ -3,6 +3,54 @@
   "artist": "Luke Schnipper",
   "tracks": [
     {
+      "id": "mallow",
+      "title": "Mallow",
+      "price": 1.0,
+      "description": "",
+      "cover": "",
+      "preview": "",
+      "formats": [
+        "mp3",
+        "aac",
+        "wav",
+        "aiff"
+      ],
+      "page": "mallow",
+      "duration": 23,
+      "released": "2026-09-27",
+      "available": true,
+      "type": "single",
+      "album": "orach"
+    },
+    {
+      "id": "orach-song-2",
+      "title": "Orach Song #2",
+      "price": 1.0,
+      "description": "",
+      "cover": "",
+      "preview": "",
+      "formats": [],
+      "page": "orachsong2",
+      "released": "2026-09-27",
+      "available": true,
+      "type": "single",
+      "preorder": true,
+      "album": "orach"
+    },
+    {
+      "id": "orach",
+      "title": "Orach",
+      "price": 10.0,
+      "description": "My orchestral album, made in Logic Pro. Buy once and download each track as it's released.",
+      "cover": "",
+      "preview": "",
+      "formats": [],
+      "page": "orach",
+      "released": "2026-09-27",
+      "available": true,
+      "type": "album"
+    },
+    {
       "id": "wunder-in-wun",
       "title": "Wunder in Wun",
       "price": 1.49,
