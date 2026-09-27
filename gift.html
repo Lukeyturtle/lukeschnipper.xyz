@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your gift | Luke Schnipper</title>
+<meta name="description" content="Your gift is ready.">
+<meta property="og:site_name" content="Luke Schnipper">
+<meta property="og:title" content="Your gift | Luke Schnipper">
+<meta name="robots" content="noindex">
+<link rel="icon" href="img/avatar.jpg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="img/avatar.jpg" alt="">Luke Schnipper</a>
+    <nav>
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="youtube.html">YouTube</a></li>
+        <li><a href="portfolio.html">Portfolio</a></li>
+        <li><a href="store.html">Store</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+<main>
+<section class="page-head">
+  <div class="wrap">
+    <h1 id="g-heading">Your gift</h1>
+    <p id="g-sub">Setting up your gift…</p>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="dl-panel" id="g-card" hidden>
+      <span class="tag">Gift purchased</span>
+      <h2 id="g-item"></h2>
+      <p class="product-meta">Send this code to whoever you're gifting it to. They redeem it at <a id="g-redeem-link" href="redeem.html">lukeschnipper.xyz/redeem</a>.</p>
+      <div class="giftcode" id="g-code"></div>
+      <button class="btn" id="g-copy" type="button">Copy code &amp; link</button>
+      <span id="g-copy-msg" class="promo-msg"></span>
+    </div>
+
+    <div class="dl-panel" id="g-freebie" hidden>
+      <span class="tag">A little thank-you</span>
+      <h2>Your free track</h2>
+      <p class="product-meta">On the house for gifting — <b id="g-freebie-title">Happy Birthday (Beat Drop)</b>.</p>
+      <div class="formats" id="g-freebie-dl"></div>
+    </div>
+
+    <div class="notice" id="g-keep" hidden></div>
+    <div class="soon" id="g-error" hidden>
+      <strong id="g-err-title">Something's not right</strong>
+      <span id="g-err-msg"></span><br><br>
+      Email <a href="mailto:buisness@lukaschnitzel.xyz">buisness@lukaschnitzel.xyz</a> and I'll sort it out.
+    </div>
+  </div>
+</section>
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <span>&copy; <span id="year"></span> Luke Schnipper. All rights reserved.</span>
+    <span>
+      <a href="https://www.youtube.com/channel/UCCg-XvMplxod1Fl-xb_kfGQ" target="_blank" rel="noopener">YouTube</a>
+      &nbsp;&middot;&nbsp;
+      <a href="mailto:general@lukaschnitzel.xyz">general@lukaschnitzel.xyz</a>
+    </span>
+  </div>
+</footer>
+<script>document.getElementById("year").textContent = new Date().getFullYear();</script>
+<script src="store/config.js"></script>
+<script>
+(async () => {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const fail = (title, msg) => { $("g-sub").textContent = ""; $("g-err-title").textContent = title; $("g-err-msg").textContent = msg; $("g-error").hidden = false; };
+  const sid = new URLSearchParams(location.search).get("session_id");
+  if (!sid) return fail("No order found", "This page needs the link you were sent to after paying.");
+  if (!window.STORE_API) return fail("Store isn't switched on", "Your payment is safe. Email me and I'll send your gift code.");
+
+  let res, data;
+  try { res = await fetch(`${window.STORE_API}/gift?session_id=${encodeURIComponent(sid)}`); data = await res.json(); }
+  catch { return fail("Couldn't reach the store", "Check your connection and refresh this page."); }
+  if (!res.ok) return fail(res.status === 402 ? "Payment still processing" : "Can't load this gift", data.error || "Unknown error.");
+
+  document.title = `Gift: ${data.item.title} | Luke Schnipper`;
+  $("g-heading").textContent = "Thanks — your gift is ready!";
+  $("g-sub").textContent = `You gifted ${data.item.title}. Here's the code to pass on.`;
+  $("g-item").textContent = data.item.title;
+  $("g-code").textContent = data.code;
+  const redeemUrl = `${data.redeem_url}?code=${encodeURIComponent(data.code)}`;
+  $("g-redeem-link").href = redeemUrl;
+  $("g-card").hidden = false;
+
+  $("g-copy").addEventListener("click", async () => {
+    const text = `You've been gifted "${data.item.title}" by Luke Schnipper!\nRedeem it here: ${redeemUrl}\nGift code: ${data.code}`;
+    try { await navigator.clipboard.writeText(text); $("g-copy-msg").textContent = "Copied!"; $("g-copy-msg").className = "promo-msg good"; }
+    catch { $("g-copy-msg").textContent = redeemUrl; }
+  });
+
+  if (data.freebie) {
+    $("g-freebie-title").textContent = data.freebie.title;
+    $("g-freebie-dl").innerHTML = `<a class="format" href="${esc(data.freebie.url)}"><span class="fmt">MP3</span><span class="det">${esc(data.freebie.title)}</span><span class="size">download ↓</span></a>`;
+    $("g-freebie").hidden = false;
+  }
+
+  const until = new Date(data.expires).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+  $("g-keep").innerHTML = `The gift code works until <b>${esc(until)}</b>.` + (data.email ? ` Your receipt went to <b>${esc(data.email)}</b>.` : "");
+  $("g-keep").hidden = false;
+})();
+</script>
+</body>
+</html>

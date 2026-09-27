@@ -2,6 +2,8 @@
 //
 //   POST /checkout  {id}          -> starts a Stripe Checkout session for one track, returns {client_secret}
 //   GET  /order?session_id=cs_... -> confirms payment; returns download groups (album = many, pre-order = none yet)
+//   GET  /gift?session_id=cs_...  -> for a gift purchase: issues the one-time code + a freebie link
+//   GET  /redeem?code=...         -> recipient exchanges a gift code for the download links
 //   GET  /file?token=...          -> streams one file from the private R2 bucket
 //
 // Prices come from the public catalog (store/tracks.json), never from the browser.
@@ -16,6 +18,10 @@ const FORMAT_ORDER = ["mp3", "aac", "wav", "aiff"];
 const LINK_TTL_SECONDS = 6 * 60 * 60;
 // Albums and pre-orders can release long after purchase, so their download page stays valid far longer.
 const PREORDER_LINK_DAYS = 730;
+const GIFT_LINK_DAYS = 365;
+// Complimentary track every gift buyer receives (private, not in the public catalog).
+const FREEBIE = { id: "birthday-beatdrop", title: "Happy Birthday (Beat Drop)" };
+const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";  // no I L O U, for human-friendly gift codes
 const ZERO_DECIMAL = new Set(["bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf"]);
 const TRACK_ID = /^[a-z0-9-]{1,80}$/;
 // Required by the embedded custom payment form.
@@ -29,6 +35,8 @@ export default {
     try {
       if (url.pathname === "/checkout" && request.method === "POST") return await checkout(request, env, cors);
       if (url.pathname === "/order" && request.method === "GET") return await order(url, env, cors);
+      if (url.pathname === "/gift" && request.method === "GET") return await gift(url, env, cors);
+      if (url.pathname === "/redeem" && request.method === "GET") return await redeem(url, env, cors);
       if (url.pathname === "/file" && request.method === "GET") return await file(url, env);
       if (url.pathname === "/") return json({ ok: true }, 200, cors);
       return json({ error: "Not found" }, 404, cors);
@@ -40,8 +48,8 @@ export default {
 };
 
 async function checkout(request, env, cors) {
-  let id;
-  try { ({ id } = await request.json()); } catch { return json({ error: "Bad request" }, 400, cors); }
+  let id, isGift = false;
+  try { const b = await request.json(); id = b.id; isGift = !!b.gift; } catch { return json({ error: "Bad request" }, 400, cors); }
   const cat = await loadCatalog(env);
   const track = cat.tracks.get(String(id || ""));
   if (!track || track.available === false) return json({ error: "That track isn't for sale right now." }, 404, cors);
@@ -57,7 +65,9 @@ async function checkout(request, env, cors) {
     "line_items[0][quantity]": "1",
     "line_items[0][price_data][currency]": cat.currency,
     "line_items[0][price_data][unit_amount]": String(amount),
-    "line_items[0][price_data][product_data][name]": `${track.title}${track.type === "album" ? " (album)" : track.preorder ? " (pre-order)" : " (digital download)"}`,
+    "line_items[0][price_data][product_data][name]": isGift
+      ? `${track.title} (gift)`
+      : `${track.title}${track.type === "album" ? " (album)" : track.preorder ? " (pre-order)" : " (digital download)"}`,
     billing_address_collection: "auto",
     "phone_number_collection[enabled]": "false",
     "automatic_tax[enabled]": "false",
@@ -67,7 +77,8 @@ async function checkout(request, env, cors) {
     integration_identifier: "custom_embedded_web_0001",
     "metadata[track_id]": track.id,
     "payment_intent_data[metadata][track_id]": track.id,
-    return_url: `${site}/${track.page || "download.html"}?session_id={CHECKOUT_SESSION_ID}`,
+    ...(isGift ? { "metadata[gift]": "1", "payment_intent_data[metadata][gift]": "1" } : {}),
+    return_url: `${site}/${isGift ? "gift" : (track.page || "download.html")}?session_id={CHECKOUT_SESSION_ID}`,
   };
   if (track.description) params["line_items[0][price_data][product_data][description]"] = String(track.description).slice(0, 500);
   if (track.cover) params["line_items[0][price_data][product_data][images][0]"] = new URL(track.cover, site + "/").href;
@@ -138,6 +149,99 @@ async function order(url, env, cors) {
   }, 200, cors);
 }
 
+async function gift(url, env, cors) {
+  const sessionId = url.searchParams.get("session_id") || "";
+  if (!/^cs_(test|live)_[A-Za-z0-9]{10,}$/.test(sessionId)) {
+    return json({ error: "That link isn't valid.", code: "invalid" }, 400, cors);
+  }
+  let session;
+  try {
+    session = await stripe(env, "GET", `checkout/sessions/${sessionId}`);
+  } catch (err) {
+    if (err.status === 404) return json({ error: "We couldn't find that order.", code: "not_found" }, 404, cors);
+    throw err;
+  }
+  if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
+    return json({ error: "This payment hasn't gone through yet. If you just paid, refresh in a minute.", code: "unpaid" }, 402, cors);
+  }
+  if (!(session.metadata && session.metadata.gift === "1")) {
+    return json({ error: "This order isn't a gift.", code: "not_gift" }, 400, cors);
+  }
+  const itemId = session.metadata.track_id;
+  if (!TRACK_ID.test(itemId || "")) {
+    return json({ error: "Your payment went through, but I couldn't tell what was gifted. Email me and I'll sort it.", code: "unknown_track" }, 500, cors);
+  }
+  const cat = await loadCatalog(env);
+  const item = cat.tracks.get(itemId) || { id: itemId, title: itemId };
+
+  // Deterministic, unguessable code tied to this session; store code -> item once (keep first created).
+  const raw = await giftCode(env, sessionId);
+  const key = `giftcodes/${raw}.json`;
+  const now = Math.floor(Date.now() / 1000);
+  let record = null;
+  const existing = await env.BUCKET.get(key);
+  if (existing) { try { record = JSON.parse(await existing.text()); } catch {} }
+  if (!record) {
+    record = { item: itemId, created: now };
+    await env.BUCKET.put(key, JSON.stringify(record), { httpMetadata: { contentType: "application/json" } });
+  }
+
+  const freebie = (await env.BUCKET.head(objectKey(FREEBIE.id, "mp3")))
+    ? { title: FREEBIE.title, url: `${url.origin}/file?token=${await sign(env, { t: FREEBIE.id, f: "mp3", e: now + LINK_TTL_SECONDS })}` }
+    : null;
+
+  return json({
+    code: `${raw.slice(0, 5)}-${raw.slice(5, 10)}`,
+    item: { id: item.id, title: item.title, type: item.type || "single" },
+    redeem_url: `${env.SITE_ORIGIN}/redeem`,
+    email: (session.customer_details && session.customer_details.email) || null,
+    freebie,
+    expires: new Date((record.created + GIFT_LINK_DAYS * 86400) * 1000).toISOString(),
+  }, 200, cors);
+}
+
+async function redeem(url, env, cors) {
+  const raw = (url.searchParams.get("code") || "").toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 10);
+  if (raw.length !== 10) return json({ error: "That gift code doesn't look right. Check for typos.", code: "invalid" }, 400, cors);
+  const obj = await env.BUCKET.get(`giftcodes/${raw}.json`);
+  if (!obj) return json({ error: "We couldn't find that gift code. Check for typos.", code: "not_found" }, 404, cors);
+  let record;
+  try { record = JSON.parse(await obj.text()); } catch { return json({ error: "That gift code is unreadable. Email me and I'll help.", code: "corrupt" }, 500, cors); }
+
+  const now = Math.floor(Date.now() / 1000);
+  const expiresAt = record.created + GIFT_LINK_DAYS * 86400;
+  if (now > expiresAt) return json({ error: `This gift code expired ${GIFT_LINK_DAYS} days after it was bought.`, code: "expired" }, 410, cors);
+
+  const cat = await loadCatalog(env);
+  const item = cat.tracks.get(record.item) || { id: record.item, title: record.item };
+  const items = [], pending = [];
+  for (const id of deliverables(cat, item)) {
+    const meta = cat.tracks.get(id) || { id, title: id };
+    const files = await filesForTrack(env, url.origin, id, now);
+    if (files.length) items.push({ id, title: meta.title, files });
+    else pending.push({ id, title: meta.title });
+  }
+  const status = items.length ? (pending.length ? "partial" : "ready") : "pending";
+
+  return json({
+    track: { id: item.id, title: item.title, artist: cat.artist, type: item.type || "single",
+             cover: item.cover ? new URL(item.cover, env.SITE_ORIGIN + "/").href : null },
+    gift: true, status, items, pending,
+    expires: new Date(expiresAt * 1000).toISOString(),
+  }, 200, cors);
+}
+
+// Human-friendly, unguessable gift code derived from the paid session (idempotent per session).
+async function giftCode(env, sessionId) {
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", await hmacKey(env), enc.encode("gift:" + sessionId)));
+  let bits = 0, val = 0, out = "";
+  for (let i = 0; i < sig.length && out.length < 10; i++) {
+    val = (val << 8) | sig[i]; bits += 8;
+    while (bits >= 5 && out.length < 10) { out += CROCKFORD[(val >> (bits - 5)) & 31]; bits -= 5; }
+  }
+  return out;
+}
+
 async function file(url, env) {
   const p = await verify(env, url.searchParams.get("token"));
   if (!p || !FORMATS[p.f] || !TRACK_ID.test(p.t || "")) return page("This download link isn't valid.", 403);
@@ -148,7 +252,7 @@ async function file(url, env) {
   if (!obj) return page("File not found.", 404);
 
   const cat = await loadCatalog(env).catch(() => null);
-  const title = (cat && cat.tracks.get(p.t) && cat.tracks.get(p.t).title) || p.t;
+  const title = p.t === FREEBIE.id ? FREEBIE.title : ((cat && cat.tracks.get(p.t) && cat.tracks.get(p.t).title) || p.t);
   const artist = (cat && cat.artist) || "Luke Schnipper";
   const name = `${artist} - ${title}.${FORMATS[p.f].ext || p.f}`.replace(/[\/\\:*?"<>|]/g, "-");
   const ascii = name.replace(/[^\x20-\x7e]/g, "_");

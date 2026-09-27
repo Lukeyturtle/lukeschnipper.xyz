@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redeem a gift | Luke Schnipper</title>
+<meta name="description" content="Redeem a gift code from Luke Schnipper.">
+<meta property="og:site_name" content="Luke Schnipper">
+<meta property="og:title" content="Redeem a gift | Luke Schnipper">
+<meta name="robots" content="noindex">
+<link rel="icon" href="img/avatar.jpg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="img/avatar.jpg" alt="">Luke Schnipper</a>
+    <nav>
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="youtube.html">YouTube</a></li>
+        <li><a href="portfolio.html">Portfolio</a></li>
+        <li><a href="store.html">Store</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+<main>
+<section class="page-head">
+  <div class="wrap">
+    <h1>Redeem a gift</h1>
+    <p>Got a gift code? Enter it below to download your music.</p>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="dl-panel" id="r-form">
+      <div class="promo">
+        <input id="r-code" type="text" placeholder="Gift code (e.g. AB12C-3DE4F)" autocomplete="off" autocapitalize="characters">
+        <button id="r-go" type="button" class="btn primary">Redeem</button>
+      </div>
+      <span id="r-msg" class="promo-msg"></span>
+    </div>
+
+    <div class="dl-panel" id="r-downloads" hidden>
+      <h2 id="r-dl-heading">Your music</h2>
+      <div id="r-groups"></div>
+      <div id="r-pending" class="dl-pending" hidden></div>
+      <p class="fine-print"><b>Bookmark this page</b> or keep your code to download again later.</p>
+    </div>
+  </div>
+</section>
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <span>&copy; <span id="year"></span> Luke Schnipper. All rights reserved.</span>
+    <span>
+      <a href="https://www.youtube.com/channel/UCCg-XvMplxod1Fl-xb_kfGQ" target="_blank" rel="noopener">YouTube</a>
+      &nbsp;&middot;&nbsp;
+      <a href="mailto:general@lukaschnitzel.xyz">general@lukaschnitzel.xyz</a>
+    </span>
+  </div>
+</footer>
+<script>document.getElementById("year").textContent = new Date().getFullYear();</script>
+<script src="store/config.js"></script>
+<script>
+(async () => {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const mb = n => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+
+  const go = async () => {
+    const code = $("r-code").value.trim();
+    if (!code) return;
+    if (!window.STORE_API) { $("r-msg").textContent = "The store isn't switched on yet."; $("r-msg").className = "promo-msg bad"; return; }
+    $("r-go").disabled = true; $("r-msg").textContent = "Checking…"; $("r-msg").className = "promo-msg";
+    let res, data;
+    try { res = await fetch(`${window.STORE_API}/redeem?code=${encodeURIComponent(code)}`); data = await res.json(); }
+    catch { $("r-msg").textContent = "Couldn't reach the store. Try again."; $("r-msg").className = "promo-msg bad"; $("r-go").disabled = false; return; }
+    if (!res.ok) { $("r-msg").textContent = data.error || "That code didn't work."; $("r-msg").className = "promo-msg bad"; $("r-go").disabled = false; return; }
+
+    $("r-msg").textContent = "";
+    const loadedAt = Date.now();
+    const fmtRow = f => `<a class="format" href="${esc(f.url)}" data-format="${esc(f.format)}"><span class="fmt">${esc(f.label)}</span><span class="det">${esc(f.detail)}</span><span class="size">${mb(f.size)} ↓</span></a>`;
+    const multi = (data.items.length + data.pending.length) > 1 || data.track.type === "album";
+    $("r-dl-heading").textContent = `${data.track.title} — enjoy!`;
+    $("r-groups").innerHTML = data.items.map(it => `${multi ? `<h3 class="dl-song">${esc(it.title)}</h3>` : ""}<div class="formats">${it.files.map(fmtRow).join("")}</div>`).join("")
+      || `<p class="preview-note">This gift isn't downloadable yet — it's a pre-order. Bookmark this page; it'll appear here on release.</p>`;
+    $("r-groups").addEventListener("click", e => { if (e.target.closest("a.format") && Date.now() - loadedAt > 5 * 3600e3) { e.preventDefault(); go(); } });
+    if (data.pending.length) { $("r-pending").hidden = false; $("r-pending").innerHTML = `<h3 class="dl-song">Still to come</h3>` + data.pending.map(x => `<div class="pending-row">${esc(x.title)} <span>coming soon</span></div>`).join(""); }
+    $("r-downloads").hidden = false;
+    $("r-downloads").scrollIntoView({ behavior: "smooth", block: "start" });
+    $("r-go").disabled = false;
+  };
+  $("r-go").addEventListener("click", go);
+  $("r-code").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); go(); } });
+
+  const pre = new URLSearchParams(location.search).get("code");
+  if (pre) { $("r-code").value = pre; go(); }
+})();
+</script>
+</body>
+</html>

@@ -30,13 +30,14 @@ window.storeCheckoutReady = () =>
 // Starts a Checkout Session for one track and mounts the payment form into `selector`.
 // Rejects with a readable message if the session can't be created; after a successful
 // payment Stripe sends the buyer to the session's return_url (the download page).
-window.mountStoreCheckout = async function (trackId, selector) {
+window.mountStoreCheckout = async function (trackId, selector, opts) {
+  const gift = !!(opts && opts.gift);
   const stripe = Stripe(window.STRIPE_PUBLISHABLE_KEY, { betas: ["custom_checkout_payment_form_1"] });
 
   const clientSecret = fetch(`${window.STORE_API}/checkout`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id: trackId }),
+    body: JSON.stringify({ id: trackId, gift }),
   }).then(async (response) => {
     const json = await response.json().catch(() => ({}));
     if (!response.ok || !json.client_secret) throw new Error(json.error || "Couldn't start checkout.");

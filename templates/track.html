@@ -145,23 +145,31 @@
     if (/^https:\/\//.test(t.payment_link || "")) {
       $("tp-buy-wrap").innerHTML = `<a class="btn primary" href="${esc(t.payment_link)}">${esc(label)}</a>`;
     } else if (typeof window.storeCheckoutReady === "function" && window.storeCheckoutReady()) {
-      $("tp-buy-wrap").innerHTML = `<button class="btn primary" id="tp-buy">${esc(label)}</button>`;
-      const btn = $("tp-buy");
-      window.addEventListener("pageshow", () => { if ($("tp-checkout").hidden) { btn.disabled = false; btn.textContent = label; } });
-      btn.addEventListener("click", async () => {
-        btn.disabled = true; btn.textContent = "Opening checkout…";
+      // Gift is offered for the album and for released singles (not for a plain pre-order single).
+      const canGift = isAlbum || (!isPre && released(t));
+      $("tp-buy-wrap").innerHTML = `<button class="btn primary" id="tp-buy">${esc(label)}</button>`
+        + (canGift ? ` <button class="btn" id="tp-gift">Gift this</button>` : "");
+      const btn = $("tp-buy"), giftBtn = $("tp-gift");
+      const openCheckout = async (asGift, srcBtn, busyText) => {
+        [btn, giftBtn].forEach(b => b && (b.disabled = true));
+        srcBtn.textContent = "Opening checkout…";
         $("dl-error").hidden = true;
         try {
+          $("tp-checkout").querySelector("h2").textContent = asGift ? `Gift ${t.title}` : "Checkout";
           $("tp-checkout").hidden = false;
           $("tp-checkout").scrollIntoView({ behavior: "smooth", block: "start" });
-          await window.mountStoreCheckout(t.id, "#checkout-form");
-          btn.textContent = "Paying below…";
+          await window.mountStoreCheckout(t.id, "#checkout-form", { gift: asGift });
+          srcBtn.textContent = "Paying below…";
         } catch (e) {
           $("tp-checkout").hidden = true; $("checkout-form").innerHTML = "";
           fail("Couldn't start checkout", e.message);
-          btn.disabled = false; btn.textContent = label;
+          [btn, giftBtn].forEach(b => b && (b.disabled = false));
+          btn.textContent = label; if (giftBtn) giftBtn.textContent = "Gift this";
         }
-      });
+      };
+      window.addEventListener("pageshow", () => { if ($("tp-checkout").hidden) { [btn, giftBtn].forEach(b => b && (b.disabled = false)); btn.textContent = label; if (giftBtn) giftBtn.textContent = "Gift this"; } });
+      btn.addEventListener("click", () => openCheckout(false, btn));
+      if (giftBtn) giftBtn.addEventListener("click", () => openCheckout(true, giftBtn));
     } else {
       $("tp-buy-wrap").innerHTML = `<button class="btn primary" disabled>Opening soon</button>`;
     }
