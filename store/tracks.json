@@ -1,5 +1,24 @@
 {
   "currency": "gbp",
   "artist": "Luke Schnipper",
-  "tracks": []
+  "tracks": [
+    {
+      "id": "wunder-in-wun",
+      "title": "Wunder in Wun",
+      "price": 1.49,
+      "description": "",
+      "cover": "",
+      "preview": "",
+      "formats": [
+        "mp3",
+        "aac",
+        "wav",
+        "aiff"
+      ],
+      "page": "wunderinwun",
+      "duration": 74,
+      "released": "2026-09-27",
+      "available": true
+    }
+  ]
 }
